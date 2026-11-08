@@ -1,22 +1,53 @@
 # SharpCV
 
-A image library combines [OpenCV](https://github.com/opencv/opencv) and [NumSharp](https://github.com/SciSharp/NumSharp.Lite) together. `SharpCV` returns `Mat` object with `NDArray` supported, which makes it easier to do data manipulation like slicing.
+A image library combines [OpenCV](https://github.com/opencv/opencv) and [NumSharp](https://github.com/SciSharp/NumSharp) together. `SharpCV` returns `Mat` object with `NDArray` supported, which makes it easier to do data manipulation like slicing: a `Mat`'s pixels ARE an `NDArray` (no copy), and every `cv2.*` function takes an `NDArray` back, by the same rules opencv-python applies to NumPy arrays.
 
 [![Join the chat at https://gitter.im/publiclab/publiclab](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/sci-sharp/community) [![NuGet](https://img.shields.io/nuget/dt/SharpCV.svg)](https://www.nuget.org/packages/SharpCV)
 
 ### How to use
 
-Install OpenCV prebuild binary
+Install SharpCV and the OpenCV runtime it binds to (SharpCV targets .NET 8 and .NET 10, like NumSharp 0.80.0):
 
 ```powershell
 PM> Install-Package SharpCV
-PM> Install-Package OpenCvSharp4.runtime.win
+PM> Install-Package OpenCvSharp4.runtime.win -Version 4.13.0.20261107
 ```
-Import SharpCV and OpenCV library
+
+SharpCV's native signatures are verified against OpenCvSharpExtern 4.13; the first call checks the loaded runtime and refuses another OpenCV version with a clear message instead of corrupting memory.
+
+Import SharpCV, OpenCV and NumSharp
 ```csharp
+using NumSharp;
 using SharpCV;
 using static SharpCV.Binding;
 ```
+
+### Images are NDArrays
+
+```csharp
+NDArray img = cv2.imread("solar.jpg");        // (410, 730, 3) uint8, a view of OpenCV's own pixels
+NDArray roi = img["50:150, 100:300"];          // NumSharp slicing: still a view
+cv2.rectangle(roi, (10, 10), (90, 60), (0, 0, 255), -1);   // draws INTO img, as cv2 draws into a numpy array
+
+var gray = cv2.cvtColor(img["..., ::-1"], ColorConversionCodes.COLOR_RGB2GRAY);   // any layout is accepted
+var mask = (gray.data < 128).astype(np.uint8) * 255;                              // NumSharp arithmetic
+var (contours, hierarchy) = cv2.findContours(mask, RetrievalModes.RETR_EXTERNAL, ContourApproximationModes.CHAIN_APPROX_SIMPLE);
+```
+
+- `mat.data` (or `mat.AsNDArray()`) is a zero-copy view, shaped as opencv-python shapes its arrays: the Mat's dimensions, then the channels when there are several (`(H, W)`, `(H, W, C)`, `(1, 3, H, W)` for a dnn blob). A region of interest keeps its parent's row stride.
+- `new Mat(nd)` (and the implicit conversion every `cv2.*` argument uses) shares the array's memory when the layout fits a `cv::Mat`, and copies it otherwise (a transposed, reversed, column-strided or broadcast array), exactly like opencv-python. `MatCodecMode.View` refuses the copy, `MatCodecMode.Copy` always copies.
+- Functions that draw INTO an image (`rectangle`, `putText`, `drawContours`) take an `NDArray` as cv2 takes an output array: it must be writeable and viewable, otherwise `OpenCVException` ("Layout of the output array img is incompatible with cv::Mat").
+- Lifetimes are automatic both ways: a view keeps its own reference to the pixels (it stays valid after the `Mat` is disposed), and a `Mat` made from an `NDArray` keeps a counted reference to the array.
+
+| OpenCV depth | NumSharp dtype | | OpenCV depth | NumSharp dtype |
+|---|---|---|---|---|
+| `CV_8U` | `uint8` | | `CV_32S` | `int32` |
+| `CV_8S` | `int8` | | `CV_32F` | `float32` |
+| `CV_16U` | `uint16` | | `CV_64F` | `float64` |
+| `CV_16S` | `int16` | | `CV_16F` | `float16` |
+
+`int64` and `uint64` arrays are cast to `int32`, as cv2 casts them; `bool`, `uint32`, `char`, `decimal` and `complex128` arrays are refused.
+
 Interact with `NDArray`
 
 ```csharp
@@ -39,12 +70,14 @@ Pixel level access
 
 ```csharp
 var img = cv2.imread(imgSolar, IMREAD_COLOR.IMREAD_GRAYSCALE);
-byte p = img[8, 8];
+byte p = (byte)img[8, 8];
 Assert.AreEqual(18, p);
 
 img = cv2.imread(imgSolar);
-var (b, g, r) = img[8, 8];
+var px = img[8, 8];                                  // an NDArray view of the pixel: [32, 19, 11]
+var (b, g, r) = (img[8, 8, 0], img[8, 8, 1], img[8, 8, 2]);
 Assert.AreEqual((32, 19, 11), (b, g, r));
+img[8, 8] = np.array(new byte[] { 0, 0, 255 });     // writes the pixel
 ```
 
 Convert to black and white image
@@ -56,6 +89,7 @@ var (ret, binary) = cv2.threshold(gray, 0, 255, ThresholdTypes.THRESH_BINARY | T
 cv2.imshow("black and white", binary);
 cv2.waitKey(0);
 ```
+
 Video capture from file or camera
 ```csharp
 var vid = cv2.VideoCapture("road.mp4");
@@ -67,5 +101,44 @@ while (loaded)
 }
 ```
 
-If you want to learn more about the API implementation, please refer to the official [documentation](https://docs.opencv.org/).
+Decode every frame into one NumSharp buffer (no allocation per frame):
+```csharp
+using var vid = cv2.VideoCapture("road.mp4");
+var frame = np.zeros(new Shape(720, 1280, 3), np.uint8);
+while (vid.read(frame).Item1)
+{
+    // frame holds the current image
+}
+```
 
+### Errors
+
+OpenCV errors raise `OpenCVException`, with opencv-python's `cv2.error` message and code (`Status`):
+
+```
+OpenCV(4.13.0) ...color.simd_helpers.hpp:92: error: (-15:Bad number of channels) in function '...'
+> Invalid number of channels in input image:
+>     'VScn::contains(scn)'
+```
+
+### Upgrading from 0.14
+
+- TensorFlow.NET (and its native runtime) is gone: `Mat.data` is a `NumSharp.NDArray`, `Mat.shape` a `NumSharp.Shape`, `Mat.dtype` a NumSharp `DType`, and the target frameworks are `net8.0` and `net10.0`.
+- Use the OpenCvSharp4.runtime 4.13.0.20261107 package. OpenCvSharpExtern 4.13 changed export signatures (findContours now fills vectors the caller allocates).
+- Defaults follow opencv-python: `getStructuringElement` anchors at the centre (MORPH_CROSS was an L-shape), `morphologyEx` uses `morphologyDefaultBorderValue()` (erosions no longer eat in from the image edge), `drawContours(Mat ...)` uses offset (0, 0), and `dnn.blobFromImage` defaults to `swapRB: false`.
+- Fixed: `rotate(img, center, ...)` turned about the top-left corner (the centre was passed as ints where OpenCV reads floats); an ROI's `data` ignored the row step; `FLIP_MODE.FLIP_VERTICAL_MODE` / `FLIP_BOTH_MODE` flipped horizontally; `VideoCapture` was freed with `FreeHGlobal`; failing calls returned an empty `Mat` silently; `waitKey` returns the key.
+- `img[8, 8]` returns an `NDArray` view; read a grayscale pixel with `(byte)img[8, 8]`.
+
+### Tests
+
+The tests compare SharpCV with opencv-python 4.13 bit for bit, live: the same arrays cross into Python without a copy through NumSharp.Interop.pythonnet. Point `SHARPCV_PYTHON` at a Python that has `numpy` and `opencv-python==4.13.*`:
+
+```powershell
+pip install numpy opencv-python==4.13.0.92
+$env:SHARPCV_PYTHON = "C:\Python312\python.exe"
+dotnet test test/UnitTest
+```
+
+Without Python the comparisons report Inconclusive; with `CI=true` (or `SHARPCV_REQUIRE_PYTHON=1`) they fail instead.
+
+If you want to learn more about the API implementation, please refer to the official [documentation](https://docs.opencv.org/).

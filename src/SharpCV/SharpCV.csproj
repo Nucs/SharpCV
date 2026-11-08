@@ -1,24 +1,33 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
-    <LangVersion>10.0</LangVersion>
+    <!-- NumSharp 0.80.0 ships net8.0 and net10.0 only, so SharpCV targets the same two frameworks. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <AssemblyName>SharpCV</AssemblyName>
     <RootNamespace>SharpCV</RootNamespace>
     <PackageId>SharpCV</PackageId>
-    <Version>0.14.0</Version>
+    <Version>0.20.0</Version>
     <Authors>Haiping Chen</Authors>
     <Company>SciSharp STACK</Company>
     <Product>SharpCV</Product>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>A image library combines OpenCV and NumSharp together.</Description>
     <PackageProjectUrl>https://github.com/SciSharp/SharpCV</PackageProjectUrl>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/44989469?s=200&amp;v=4</PackageIconUrl>
     <RepositoryUrl>https://github.com/SciSharp/SharpCV</RepositoryUrl>
-    <PackageTags>OpenCV</PackageTags>
+    <PackageTags>OpenCV;NumSharp;NumPy;image</PackageTags>
     <RepositoryType>git</RepositoryType>
-    <PackageReleaseNotes>cv2.dnn, cv2.morphologyEx, cv2.findContours, cv2.drawContours, cv2.approxPolyDP, cv2.minAreaRect, cv2.split</PackageReleaseNotes>
+    <PackageReleaseNotes>NumSharp 0.80.0 replaces TensorFlow.NET: Mat and NDArray share pixels without copying in both directions (opencv-python's conversion rules, Auto / View / Copy), every OpenCV depth maps to a NumSharp dtype, and OpenCV errors raise OpenCVException. Verified against OpenCvSharp4.runtime.win 4.13.0.20261107; parity-tested against opencv-python 4.13.</PackageReleaseNotes>
     <Platforms>AnyCPU;x64</Platforms>
+    <!-- The code base predates nullable reference types; annotations keep its existing `?` markers legal without
+         turning on flow analysis for every file. -->
+    <Nullable>annotations</Nullable>
+    <!-- The XML documentation ships in the package for the documented API; the pre-0.20 enums (BorderTypes,
+         ColorConversionCodes, ...) carry no comments yet, so their CS1591 noise is silenced instead of drowning real
+         warnings. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -41,11 +50,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="TensorFlow.NET" Version="0.150.0" />
+    <PackageReference Include="NumSharp" Version="0.80.0" />
   </ItemGroup>
 
-  <ItemGroup Condition="$(SolutionName)==ModelsDebug Or $(SolutionName)==Debugging">
-    <ProjectReference Include="..\..\..\TensorFlow.NET\src\TensorFlowNET.Core\Tensorflow.Binding.csproj" />
+  <ItemGroup>
+    <!-- The test project reads the bridge's internal lease counter to prove that views release their cv::Mat. -->
+    <InternalsVisibleTo Include="UnitTest" />
   </ItemGroup>
 
 </Project>

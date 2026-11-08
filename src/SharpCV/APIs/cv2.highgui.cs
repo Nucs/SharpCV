@@ -7,29 +7,52 @@ namespace SharpCV
 {
     public partial class cv_api
     {
+        /// <summary><c>cv2.imshow(winname, mat)</c>: shows the image in a window (created on first use). Needs a desktop
+        ///     session and a <see cref="waitKey"/> call to paint.</summary>
+        /// <param name="windownName">The window title.</param>
+        /// <param name="img">The image; an NDArray converts implicitly.</param>
+        /// <exception cref="OpenCVException">OpenCV cannot show the image (no GUI backend, unsupported type).</exception>
         public void imshow(string windownName, Mat img)
         {
-            cv2_native_api.highgui_imshow(windownName, img);
+            NativeMethods.Call(() => cv2_native_api.highgui_imshow(windownName, img));
+            GC.KeepAlive(img);
         }
 
+        /// <summary><c>cv2.namedWindow(winname, flags)</c>.</summary>
+        /// <param name="name">The window title.</param>
+        /// <param name="mode">The window flags.</param>
+        /// <exception cref="OpenCVException">OpenCV has no GUI backend.</exception>
         public void namedWindow(string name, WindowFlags mode)
         {
-            cv2_native_api.highgui_namedWindow(name, (int)mode);
+            NativeMethods.Call(() => cv2_native_api.highgui_namedWindow(name, (int)mode));
         }
 
+        /// <summary><c>cv2.resizeWindow(winname, width, height)</c>.</summary>
+        /// <param name="name">The window title.</param>
+        /// <param name="width">The new width.</param>
+        /// <param name="height">The new height.</param>
+        /// <exception cref="OpenCVException">OpenCV has no GUI backend.</exception>
         public void resizeWindow(string name, int width, int height)
         {
-            cv2_native_api.highgui_resizeWindow(name, width, height);
+            NativeMethods.Call(() => cv2_native_api.highgui_resizeWindow(name, width, height));
         }
 
-        public void waitKey(int delay = 0)
+        /// <summary><c>cv2.waitKey(delay)</c>: processes window events for <paramref name="delay"/> ms.</summary>
+        /// <param name="delay">Milliseconds to wait; 0 waits for a key.</param>
+        /// <returns>The pressed key's code, or -1 when none was pressed (it returned nothing before SharpCV 0.20).</returns>
+        /// <exception cref="OpenCVException">OpenCV has no GUI backend.</exception>
+        public int waitKey(int delay = 0)
         {
-            cv2_native_api.highgui_waitKey(delay, out var output);
+            int output = -1;
+            NativeMethods.Call(() => cv2_native_api.highgui_waitKey(delay, out output));
+            return output;
         }
 
+        /// <summary><c>cv2.destroyAllWindows()</c>.</summary>
+        /// <exception cref="OpenCVException">OpenCV has no GUI backend.</exception>
         public void destroyAllWindows()
         {
-            cv2_native_api.highgui_destroyAllWindows();
+            NativeMethods.Call(() => cv2_native_api.highgui_destroyAllWindows());
         }
     }
 }

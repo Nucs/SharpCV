@@ -4,6 +4,10 @@ using System.Text;
 
 namespace SharpCV
 {
+    /// <summary>
+    ///     <c>cv2.moments</c>'s result: the spatial moments OpenCV computed, and the central and normalized central
+    ///     moments derived from them with <c>cv::Moments</c>' own formulas (so the values match cv2's dictionary).
+    /// </summary>
     public partial class Moments
     {
         /// <summary>
@@ -21,12 +25,32 @@ namespace SharpCV
         /// </summary>
         public double Nu20, Nu11, Nu02, Nu30, Nu21, Nu12, Nu03;
 
+        /// <summary>Computes the moments of an image or contour (<c>cv2.moments(img, binaryImage)</c>).</summary>
+        /// <param name="img">An image (single channel) or a contour.</param>
+        /// <param name="binaryImage">True counts every non-zero pixel as 1.</param>
+        /// <exception cref="OpenCVException">OpenCV rejects the input (a multi-channel image).</exception>
         public Moments(Mat img, bool binaryImage = false)
         {
-            cv2_native_api.imgproc_moments(img.InputArray, binaryImage ? 1 : 0, out var m);
+            NativeStruct m = default;
+            NativeMethods.Call(() => cv2_native_api.imgproc_moments(img.InputArray, binaryImage ? 1 : 0, out m));
+            GC.KeepAlive(img);
             Initialize(m.m00, m.m10, m.m01, m.m20, m.m11, m.m02, m.m30, m.m21, m.m12, m.m03);
         }
 
+        /// <summary>
+        ///     Stores the spatial moments and derives the central and normalized ones exactly as the
+        ///     <c>cv::Moments(m00, ..., m03)</c> constructor does.
+        /// </summary>
+        /// <param name="m00">The zeroth moment (the area / mass).</param>
+        /// <param name="m10">First moment in x.</param>
+        /// <param name="m01">First moment in y.</param>
+        /// <param name="m20">Second moment in x.</param>
+        /// <param name="m11">Mixed second moment.</param>
+        /// <param name="m02">Second moment in y.</param>
+        /// <param name="m30">Third moment in x.</param>
+        /// <param name="m21">Mixed third moment (x^2 y).</param>
+        /// <param name="m12">Mixed third moment (x y^2).</param>
+        /// <param name="m03">Third moment in y.</param>
         private void Initialize(double m00, double m10, double m01, double m20, double m11,
                        double m02, double m30, double m21, double m12, double m03)
         {

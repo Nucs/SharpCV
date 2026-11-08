@@ -2,27 +2,135 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
+using NumSharp;
+using NumSharp.Backends.Unmanaged;
 
 namespace SharpCV
 {
     public partial class cv_api
     {
+        /// <summary>
+        ///     <c>cv2.imread(filename, flags)</c>: decodes an image file. Like OpenCV (and unlike most .NET readers) a
+        ///     missing or undecodable file gives an EMPTY Mat, whose <see cref="Mat.data"/> is null (cv2 returns
+        ///     <c>None</c>), not an exception.
+        /// </summary>
+        /// <param name="filename">The file.</param>
+        /// <param name="flags">Colour (BGR, the default), grayscale, unchanged, ...</param>
+        /// <returns>The image (<c>(H, W, 3)</c> uint8 for a colour image).</returns>
+        /// <exception cref="OpenCVException">The decoder failed hard (OpenCV error, not a missing file).</exception>
         public Mat imread(string filename, IMREAD_COLOR flags = IMREAD_COLOR.IMREAD_COLOR)
         {
-            cv2_native_api.imgcodecs_imread(filename, (int)flags, out var handle);
+            IntPtr handle = IntPtr.Zero;
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imread(filename, (int)flags, out handle));
             return new Mat(handle);
         }
 
+        /// <summary><c>cv2.imwrite(filename, img, params)</c>: encodes by the file extension and writes the file.</summary>
+        /// <param name="filename">The output file.</param>
+        /// <param name="img">The image; an NDArray converts implicitly.</param>
+        /// <param name="params">Encoder parameter pairs (id, value).</param>
+        /// <returns>True when the file was written.</returns>
+        /// <exception cref="OpenCVException">No encoder for the extension, or the image type does not fit it.</exception>
         public bool imwrite(string filename, Mat img, params int[] @params)
         {
-            cv2_native_api.imgcodecs_imwrite(filename, img, @params, @params.Length, out var output);
+            int output = 0;
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imwrite(filename, img, @params, @params.Length, out output));
+            GC.KeepAlive(img);
             return output != 0;
         }
 
+        /// <summary>A region of <paramref name="src"/> that SHARES its pixels (an alias of the ROI indexer).</summary>
+        /// <param name="src">The image.</param>
+        /// <param name="rect">The region (x, y, width, height).</param>
+        /// <returns>A new Mat header over the region.</returns>
+        /// <exception cref="OpenCVException">The region does not lie inside the image.</exception>
         public Mat imcrop(Mat src, Rect rect)
         {
-            cv2_native_api.core_Mat_new7(src, rect, out var handle);
+            IntPtr source = src;
+            IntPtr handle = IntPtr.Zero;
+            NativeMethods.Call(() => cv2_native_api.core_Mat_new7(source, rect, out handle));
+            var roi = new Mat(handle);
+            roi.InheritSource(src);
+            GC.KeepAlive(src);
+            return roi;
+        }
+
+        /// <summary>
+        ///     <c>cv2.imdecode(buf, flags)</c>: decodes an image held in memory. <paramref name="buf"/> is any array OpenCV
+        ///     accepts as encoded bytes (cv2 asserts a continuous single-channel uint8 array); a contiguous NumSharp
+        ///     <c>uint8</c> NDArray converts implicitly WITHOUT a copy.
+        /// </summary>
+        /// <param name="buf">The encoded bytes.</param>
+        /// <param name="flags">The decode flags.</param>
+        /// <returns>The image; empty (data null) when the bytes are no image, as cv2 returns <c>None</c>.</returns>
+        /// <exception cref="OpenCVException">The buffer is not 8-bit single-channel, or the decoder failed.</exception>
+        public Mat imdecode(Mat buf, IMREAD_COLOR flags)
+        {
+            IntPtr handle = IntPtr.Zero;
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imdecode_InputArray(buf.InputArray, (int)flags, out handle));
+            GC.KeepAlive(buf);
             return new Mat(handle);
+        }
+
+        /// <summary>
+        ///     <c>cv2.imencode(ext, img, params)</c>: compresses the image in memory. The bytes come back as a 1-D uint8
+        ///     NDArray that VIEWS OpenCV's output buffer (no copy); the buffer is freed when the last view of it is disposed
+        ///     or collected.
+        /// </summary>
+        /// <param name="ext">The format extension (".png", ".jpg", ".webp", ...).</param>
+        /// <param name="img">The image; an NDArray converts implicitly.</param>
+        /// <param name="params">Encoder parameter pairs (id, value).</param>
+        /// <returns>(retval, buf) as cv2 returns them: whether encoding succeeded, and the encoded bytes.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="ext"/> or <paramref name="img"/> is null.</exception>
+        /// <exception cref="OpenCVException">No encoder for the extension, or the image type does not fit it.</exception>
+        public unsafe (bool, NDArray) imencode(string ext, Mat img, params int[] @params)
+        {
+            if (string.IsNullOrEmpty(ext))
+                throw new ArgumentNullException(nameof(ext));
+            if (img == null)
+                throw new ArgumentNullException(nameof(img));
+            @params ??= Array.Empty<int>();
+
+            IntPtr vector = cv2_native_api.vector_uchar_new1();
+            int ok = 0;
+            try
+            {
+                NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, img.InputArray, vector, @params, @params.Length, out ok));
+                GC.KeepAlive(img);
+            }
+            catch
+            {
+                cv2_native_api.vector_uchar_delete(vector);
+                throw;
+            }
+
+            long count = (long)cv2_native_api.vector_uchar_getSize(vector);
+            if (count == 0)
+            {
+                // getPointer would throw std::out_of_range across the boundary for an empty vector.
+                cv2_native_api.vector_uchar_delete(vector);
+                return (ok != 0, np.empty(new Shape(0), np.uint8));
+            }
+
+            byte* bytes = (byte*)cv2_native_api.vector_uchar_getPointer(vector);
+            int released = 0;
+            void Release()
+            {
+                // NumSharp's last-reference hook (Dispose or finalizer): free OpenCV's buffer exactly once.
+                if (System.Threading.Interlocked.Exchange(ref released, 1) == 0)
+                    cv2_native_api.vector_uchar_delete(vector);
+            }
+
+            var slice = new ArraySlice<byte>(new UnmanagedMemoryBlock<byte>(bytes, count, Release));
+            try
+            {
+                return (ok != 0, np.ndarray(new Shape(count), np.uint8, buffer: slice));
+            }
+            catch
+            {
+                Release();
+                throw;
+            }
         }
 
         /// <summary>
@@ -30,7 +138,9 @@ namespace SharpCV
         /// </summary>
         /// <param name="span">The input slice of bytes.</param>
         /// <param name="flags">The same flags as in imread</param>
-        /// <returns></returns>
+        /// <returns>The image; empty when the bytes are no image.</returns>
+        /// <exception cref="ArgumentException"><paramref name="span"/> is empty.</exception>
+        /// <exception cref="OpenCVException">The decoder failed.</exception>
         public static Mat ImDecode(byte[] span, IMREAD_COLOR flags = IMREAD_COLOR.IMREAD_COLOR)
         {
             if (span.Length == 0)
@@ -40,7 +150,11 @@ namespace SharpCV
             {
                 fixed (byte* pBuf = span)
                 {
-                        cv2_native_api.imgcodecs_imdecode_vector(pBuf, span.Length, flags, out var ret);
+                    // The buffer stays pinned for the whole native call: Call runs the lambda synchronously inside it.
+                    // A fixed local cannot be captured by a lambda, so the address crosses as an IntPtr.
+                    IntPtr address = (IntPtr)pBuf;
+                    IntPtr ret = IntPtr.Zero;
+                    NativeMethods.Call(() => cv2_native_api.imgcodecs_imdecode_vector((byte*)address, span.Length, flags, out ret));
                     return new Mat(ret);
                 }
             }
@@ -53,6 +167,9 @@ namespace SharpCV
         /// <param name="img">The image to be written</param>
         /// <param name="buf">Output buffer resized to fit the compressed image.</param>
         /// <param name="prms">Format-specific parameters.</param>
+        /// <returns>True when encoding succeeded.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="ext"/> or <paramref name="img"/> is null.</exception>
+        /// <exception cref="OpenCVException">No encoder for the extension, or the image type does not fit it.</exception>
         public static bool ImEncode(string ext, Mat img, out byte[] buf, int[]? prms = null)
         {
             if (string.IsNullOrEmpty(ext))
@@ -64,8 +181,9 @@ namespace SharpCV
 			//img.ThrowIfDisposed();
 
 			using var bufVec = new VectorOfByte();
-			var exe_result =
-                cv2_native_api.imgcodecs_imencode_vector(ext, img.OutputArray, bufVec.Handle, prms, prms.Length, out var ret);
+            int ret = 0;
+            // The image is the encoder's INPUT; SharpCV passed its OutputArray here until 0.20.
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, img.InputArray, bufVec.Handle, prms, prms.Length, out ret));
             GC.KeepAlive(img);
 
 			buf = bufVec.ToArray();

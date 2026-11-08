@@ -54,6 +54,9 @@ namespace AppConsole
                 using var img = cv2.imread(file);
             }*/
 
+            // The same images as NumSharp arrays: zero-copy views, slicing, masks, a video loop, DNN preprocessing.
+            NumSharpExamples.Run(dataDir);
+
             Console.WriteLine("Completed");
             Console.ReadLine();
         }

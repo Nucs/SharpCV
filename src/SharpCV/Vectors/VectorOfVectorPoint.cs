@@ -2,23 +2,33 @@
 
 namespace SharpCV
 {
+    /// <summary>
+    ///     A native <c>std::vector&lt;std::vector&lt;cv::Point&gt;&gt;</c>: contours as point lists, copied out to managed
+    ///     <see cref="Point"/> arrays by <see cref="ToArray"/>.
+    /// </summary>
     public class VectorOfVectorPoint : DisposableObject
     {
+        /// <summary>An empty vector for OpenCV to fill (findContours expects the caller to allocate it).</summary>
         public VectorOfVectorPoint()
         {
             _handle = cv2_native_api.vector_vector_Point_new1();
         }
 
+        /// <summary>Wraps an existing vector pointer and takes ownership of it.</summary>
+        /// <param name="ptr">The vector.</param>
         public VectorOfVectorPoint(IntPtr ptr)
         {
             _handle = ptr;
         }
 
+        /// <summary>Deletes the vector.</summary>
         protected override void FreeHandle()
         {
-            cv2_native_api.vector_vector_Point_delete(_handle);
+            if (_handle != IntPtr.Zero)
+                cv2_native_api.vector_vector_Point_delete(_handle);
         }
 
+        /// <summary>The number of contours (the outer size).</summary>
         public int Size1
         {
             get
@@ -29,8 +39,10 @@ namespace SharpCV
             }
         }
 
+        /// <summary>The number of contours (the same as <see cref="Size1"/>).</summary>
         public int Size => Size1;
 
+        /// <summary>The point count of each contour.</summary>
         public long[] Size2
         {
             get
@@ -48,6 +60,8 @@ namespace SharpCV
             }
         }
 
+        /// <summary>Copies every contour into a managed point array.</summary>
+        /// <returns>One array per contour.</returns>
         public Point[][] ToArray()
         {
             var size1 = Size1;
@@ -67,5 +81,11 @@ namespace SharpCV
             }
             return ret;
         }
+
+        /// <summary>The native vector pointer, for P/Invoke arguments (findContours fills it).</summary>
+        /// <param name="vector">The vector.</param>
+        /// <returns>Its handle.</returns>
+        public static implicit operator IntPtr(VectorOfVectorPoint vector)
+            => vector._handle;
     }
 }
