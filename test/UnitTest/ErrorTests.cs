@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
 using SharpCV;
@@ -69,6 +69,48 @@ namespace UnitTest
                 Oracle.AssertBothFail(() => cv2.blur(boolean, (3, 3)), () => Oracle.cv2.blur(boolean, (3, 3)), "bool input");
                 Oracle.AssertBothFail(() => cv2.rectangle(readOnly, (0, 0), (1, 1), 1), () => Oracle.cv2.rectangle(readOnly, (0, 0), (1, 1), 1), "read-only output");
             });
+        }
+
+        /// <summary>
+        ///     A conversion refusal names the argument as cv2 names it ("src data type = bool is not supported", then
+        ///     "kernel", "M", "array", "m"): each function opens its NDArray arguments under cv2's parameter names, where
+        ///     the implicit Mat conversion used before SharpCV 0.20's proxies called every argument "array".
+        /// </summary>
+        [TestMethod]
+        public void refusals_name_the_cv2_argument()
+        {
+            var boolean = np.zeros(new Shape(4, 4), np.dtype("bool"));
+            var image = np.zeros(new Shape(4, 4), np.uint8);
+            Oracle.Run(() =>
+            {
+                ExpectSameRefusal(() => { using var _ = cv2.cvtColor(boolean, ColorConversionCodes.COLOR_GRAY2BGR); },
+                    () => Oracle.cv2.cvtColor(boolean, (int)ColorConversionCodes.COLOR_GRAY2BGR),
+                    "src data type = bool is not supported");
+                ExpectSameRefusal(() => { using var _ = cv2.filter2D(image, MatType.Unknown, boolean); },
+                    () => Oracle.cv2.filter2D(image, -1, boolean),
+                    "kernel data type = bool is not supported");
+                ExpectSameRefusal(() => { using var _ = cv2.warpAffine(image, boolean, new Size(4, 4)); },
+                    () => Oracle.cv2.warpAffine(image, boolean, (4, 4)),
+                    "M data type = bool is not supported");
+                ExpectSameRefusal(() => cv2.moments(boolean),
+                    () => Oracle.cv2.moments(boolean),
+                    "array data type = bool is not supported");
+                ExpectSameRefusal(() => { foreach (var plane in cv2.split(boolean)) plane.Dispose(); },
+                    () => Oracle.cv2.split(boolean),
+                    "m data type = bool is not supported");
+            });
+        }
+
+        /// <summary>Both sides refuse the call, and both messages carry <paramref name="line"/>.</summary>
+        /// <param name="sharp">The SharpCV call.</param>
+        /// <param name="python">The same cv2 call (run under the GIL by the caller).</param>
+        /// <param name="line">The refusal line cv2 prints for the argument.</param>
+        private static void ExpectSameRefusal(Action sharp, Action python, string line)
+        {
+            var mine = Assert.ThrowsException<OpenCVException>(sharp);
+            StringAssert.Contains(mine.Message, line, "SharpCV's message");
+            var theirs = Assert.ThrowsException<Python.Runtime.PythonException>(python);
+            StringAssert.Contains(theirs.Message, line, "cv2's message");
         }
     }
 }

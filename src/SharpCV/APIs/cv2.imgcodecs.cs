@@ -27,15 +27,21 @@ namespace SharpCV
 
         /// <summary><c>cv2.imwrite(filename, img, params)</c>: encodes by the file extension and writes the file.</summary>
         /// <param name="filename">The output file.</param>
-        /// <param name="img">The image; an NDArray converts implicitly.</param>
+        /// <param name="img">The image (a Mat or an NDArray).</param>
         /// <param name="params">Encoder parameter pairs (id, value).</param>
         /// <returns>True when the file was written.</returns>
-        /// <exception cref="OpenCVException">No encoder for the extension, or the image type does not fit it.</exception>
-        public bool imwrite(string filename, Mat img, params int[] @params)
+        /// <exception cref="ArgumentNullException"><paramref name="img"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">No encoder for the extension, the image type does not fit it, or cv2
+        ///     refuses the NDArray.</exception>
+        public bool imwrite(string filename, InputArray img, params int[] @params)
         {
+            using var mat = img.Open("img");
+            // imgcodecs_imwrite takes the cv::Mat itself; Handle refuses a disposed Mat instead of passing OpenCV null.
+            var handle = mat.Mat.Handle;
+            @params ??= Array.Empty<int>();
             int output = 0;
-            NativeMethods.Call(() => cv2_native_api.imgcodecs_imwrite(filename, img, @params, @params.Length, out output));
-            GC.KeepAlive(img);
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imwrite(filename, handle, @params, @params.Length, out output));
             return output != 0;
         }
 
@@ -58,17 +64,20 @@ namespace SharpCV
         /// <summary>
         ///     <c>cv2.imdecode(buf, flags)</c>: decodes an image held in memory. <paramref name="buf"/> is any array OpenCV
         ///     accepts as encoded bytes (cv2 asserts a continuous single-channel uint8 array); a contiguous NumSharp
-        ///     <c>uint8</c> NDArray converts implicitly WITHOUT a copy.
+        ///     <c>uint8</c> NDArray is read WITHOUT a copy.
         /// </summary>
-        /// <param name="buf">The encoded bytes.</param>
+        /// <param name="buf">The encoded bytes (a Mat or an NDArray).</param>
         /// <param name="flags">The decode flags.</param>
         /// <returns>The image; empty (data null) when the bytes are no image, as cv2 returns <c>None</c>.</returns>
-        /// <exception cref="OpenCVException">The buffer is not 8-bit single-channel, or the decoder failed.</exception>
-        public Mat imdecode(Mat buf, IMREAD_COLOR flags)
+        /// <exception cref="ArgumentNullException"><paramref name="buf"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">The buffer is not 8-bit single-channel, the decoder failed, or cv2 refuses
+        ///     the NDArray.</exception>
+        public Mat imdecode(InputArray buf, IMREAD_COLOR flags)
         {
+            using var bytes = buf.Open("buf");
             IntPtr handle = IntPtr.Zero;
-            NativeMethods.Call(() => cv2_native_api.imgcodecs_imdecode_InputArray(buf.InputArray, (int)flags, out handle));
-            GC.KeepAlive(buf);
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imdecode_InputArray(bytes.Mat.InputArray, (int)flags, out handle));
             return new Mat(handle).Tracked();
         }
 
@@ -78,25 +87,26 @@ namespace SharpCV
         ///     or collected.
         /// </summary>
         /// <param name="ext">The format extension (".png", ".jpg", ".webp", ...).</param>
-        /// <param name="img">The image; an NDArray converts implicitly.</param>
+        /// <param name="img">The image (a Mat or an NDArray).</param>
         /// <param name="params">Encoder parameter pairs (id, value).</param>
         /// <returns>(retval, buf) as cv2 returns them: whether encoding succeeded, and the encoded bytes.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ext"/> or <paramref name="img"/> is null.</exception>
-        /// <exception cref="OpenCVException">No encoder for the extension, or the image type does not fit it.</exception>
-        public unsafe (bool, NDArray) imencode(string ext, Mat img, params int[] @params)
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">No encoder for the extension, the image type does not fit it, or cv2
+        ///     refuses the NDArray.</exception>
+        public unsafe (bool, NDArray) imencode(string ext, InputArray img, params int[] @params)
         {
             if (string.IsNullOrEmpty(ext))
                 throw new ArgumentNullException(nameof(ext));
-            if (img == null)
-                throw new ArgumentNullException(nameof(img));
             @params ??= Array.Empty<int>();
 
+            // Opened before the vector exists, so a refused argument has nothing native to clean up.
+            using var src = img.Open("img");
             IntPtr vector = cv2_native_api.vector_uchar_new1();
             int ok = 0;
             try
             {
-                NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, img.InputArray, vector, @params, @params.Length, out ok));
-                GC.KeepAlive(img);
+                NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, src.Mat.InputArray, vector, @params, @params.Length, out ok));
             }
             catch
             {
@@ -164,18 +174,19 @@ namespace SharpCV
         /// Compresses the image and stores it in the memory buffer
         /// </summary>
         /// <param name="ext">The file extension that defines the output format</param>
-        /// <param name="img">The image to be written</param>
+        /// <param name="img">The image to be written (a Mat or an NDArray)</param>
         /// <param name="buf">Output buffer resized to fit the compressed image.</param>
         /// <param name="prms">Format-specific parameters.</param>
         /// <returns>True when encoding succeeded.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="ext"/> or <paramref name="img"/> is null.</exception>
-        /// <exception cref="OpenCVException">No encoder for the extension, or the image type does not fit it.</exception>
-        public static bool ImEncode(string ext, Mat img, out byte[] buf, int[]? prms = null)
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">No encoder for the extension, the image type does not fit it, or cv2
+        ///     refuses the NDArray.</exception>
+        public static bool ImEncode(string ext, InputArray img, out byte[] buf, int[]? prms = null)
         {
             if (string.IsNullOrEmpty(ext))
                 throw new ArgumentNullException(nameof(ext));
-            if (img == null)
-                throw new ArgumentNullException(nameof(img));
+            using var src = img.Open("img");
             if (prms == null)
                 prms = Array.Empty<int>();
 			//img.ThrowIfDisposed();
@@ -183,8 +194,7 @@ namespace SharpCV
 			using var bufVec = new VectorOfByte();
             int ret = 0;
             // The image is the encoder's INPUT; SharpCV passed its OutputArray here until 0.20.
-            NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, img.InputArray, bufVec.Handle, prms, prms.Length, out ret));
-            GC.KeepAlive(img);
+            NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, src.Mat.InputArray, bufVec.Handle, prms, prms.Length, out ret));
 
 			buf = bufVec.ToArray();
 

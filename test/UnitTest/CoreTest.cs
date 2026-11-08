@@ -69,6 +69,43 @@ namespace UnitTest
             Oracle.Run(() => Oracle.AssertSame(Oracle.cv2.hconcat(Oracle.list(src, src)), hconcated.data, "hconcat"));
         }
 
+        /// <summary>
+        ///     cv2.hconcat / vconcat of a Mat next to an NDArray that needs a copy (each argument converts on its own),
+        ///     and of a <c>Mat[]</c> variable (which the <c>params</c> overload of proxies cannot take).
+        /// </summary>
+        [TestMethod]
+        public void concat_mixed_arguments_and_mat_array()
+        {
+            using var img = cv2.imread(imgSolar);
+            NDArray src = img;
+            var reversed = src["..., ::-1"];
+            using var mixed = cv2.hconcat(img, reversed);
+            Mat[] both = { img, img };
+            using var fromArray = cv2.vconcat(both);
+
+            Oracle.Run(() =>
+            {
+                Oracle.AssertSame(Oracle.cv2.hconcat(Oracle.list(src, reversed)), mixed.data, "hconcat Mat + reversed NDArray");
+                Oracle.AssertSame(Oracle.cv2.vconcat(Oracle.list(src, src)), fromArray.data, "vconcat Mat[]");
+            });
+        }
+
+        /// <summary>
+        ///     A null or disposed Mat among the images is refused before OpenCvSharpExtern dereferences it: until SharpCV
+        ///     0.20 it crossed as a null <c>cv::Mat*</c>, an access violation that ends the process.
+        /// </summary>
+        [TestMethod]
+        public void concat_refuses_null_and_disposed_mats()
+        {
+            using var img = cv2.imread(imgSolar);
+            var disposed = cv2.imread(imgSolar);
+            disposed.Dispose();
+
+            Assert.ThrowsException<ArgumentNullException>(() => cv2.hconcat(new Mat[] { img, null }));
+            Assert.ThrowsException<ObjectDisposedException>(() => cv2.vconcat(new Mat[] { img, disposed }));
+            Assert.ThrowsException<ObjectDisposedException>(() => cv2.hconcat(img, disposed));
+        }
+
         /// <summary>cv2.vconcat of the image with itself.</summary>
         [TestMethod]
         public void vconcat()

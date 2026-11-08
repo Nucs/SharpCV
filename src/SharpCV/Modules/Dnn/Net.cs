@@ -24,31 +24,32 @@ namespace SharpCV
             _handle = handle;
         }
 
-        /// <summary><c>net.setInput(blob, name)</c>. OpenCV copies the blob, so it may be released afterwards.</summary>
-        /// <param name="blob">The input (an NCHW blob from <see cref="Dnn.blobFromImage"/>).</param>
-        /// <param name="name">The input layer; empty for the first.</param>
-        /// <exception cref="OpenCVException">OpenCV rejects the blob.</exception>
-        public void setInput(Mat blob, string name = "")
-        {
-            var handle = _handle;
-            NativeMethods.Call(() => cv2_native_api.dnn_Net_setInput(handle, blob, name));
-            GC.KeepAlive(blob);
-            GC.KeepAlive(this);
-        }
+        /// <summary>The native network.</summary>
+        /// <exception cref="ObjectDisposedException">The network was disposed: OpenCvSharpExtern would dereference a null
+        ///     <c>cv::dnn::Net*</c>, an access violation .NET cannot catch.</exception>
+        private IntPtr Handle => _handle != IntPtr.Zero ? _handle : throw new ObjectDisposedException(nameof(Net));
 
         /// <summary>
-        ///     <c>net.setInput(blob, name)</c> for an NDArray blob: an n-D argument, as cv2 marks it (<c>CV_ND</c>), so a
-        ///     3-D array stays three dimensions instead of becoming a multi-channel image. A C-contiguous float32 array
-        ///     crosses without a copy (OpenCV then copies it into the input layer).
+        ///     <c>net.setInput(blob, name)</c>. OpenCV copies the blob into the input layer, so it may be released
+        ///     afterwards. An NDArray blob is an n-D argument, as cv2 marks it (<c>CV_ND</c>): a 3-D array stays three
+        ///     dimensions instead of becoming a multi-channel image, and a C-contiguous float32 array crosses without a
+        ///     copy.
         /// </summary>
-        /// <param name="blob">The input, e.g. <c>(1, 3, 224, 224)</c> float32.</param>
+        /// <param name="blob">The input: an NCHW blob Mat from <see cref="Dnn.blobFromImage"/>, or an NDArray such as a
+        ///     <c>(1, 3, 224, 224)</c> float32 array.</param>
         /// <param name="name">The input layer; empty for the first.</param>
         /// <exception cref="ArgumentNullException"><paramref name="blob"/> is null.</exception>
-        /// <exception cref="OpenCVException">The dtype has no OpenCV depth, or OpenCV rejects the blob.</exception>
-        public void setInput(NDArray blob, string name = "")
+        /// <exception cref="ObjectDisposedException">The network or a Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">OpenCV rejects the blob, or cv2 refuses the NDArray (its dtype has no
+        ///     depth).</exception>
+        public void setInput(InputArray blob, string name = "")
         {
-            using var mat = new Mat(blob, MatCodecMode.Auto, nameof(blob), output: false, ndMat: true);
-            setInput(mat, name);
+            using var input = blob.Open("blob", ndMat: true);
+            // dnn_Net_setInput takes the cv::Mat itself; Handle refuses a disposed Mat instead of passing OpenCV null.
+            var source = input.Mat.Handle;
+            var handle = Handle;
+            NativeMethods.Call(() => cv2_native_api.dnn_Net_setInput(handle, source, name));
+            GC.KeepAlive(this);
         }
 
         /// <summary>
@@ -58,10 +59,11 @@ namespace SharpCV
         /// <returns>A new Mat with the output, independent of the network: OpenCV returns a header over the network's
         ///     own buffer, which the next forward pass overwrites, so it is cloned (cv2's numpy result is a copy
         ///     too).</returns>
+        /// <exception cref="ObjectDisposedException">The network was disposed.</exception>
         /// <exception cref="OpenCVException">No input was set, or a layer failed.</exception>
         public Mat forward(string outputName = "")
         {
-            var handle = _handle;
+            var handle = Handle;
             IntPtr output = IntPtr.Zero;
             NativeMethods.Call(() => cv2_native_api.dnn_Net_forward1(handle, outputName, out output));
             GC.KeepAlive(this);

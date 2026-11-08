@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.CompilerServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NumSharp;
@@ -169,6 +169,33 @@ namespace UnitTest
 
             Assert.AreEqual(collections, NativeMemoryTrackerCollections(), "no collection for disposed results");
             Assert.IsTrue(NativeMemoryTrackerOutstanding() <= outstanding + 6L * 1024 * 1024, "every report was taken back");
+        }
+
+        /// <summary>
+        ///     An NDArray argument's conversion lives exactly as long as the call: the 6 MB copy a channel-reversed 1080p
+        ///     view needs is released when cv2.cvtColor returns, with no collection. Through the implicit Mat conversion
+        ///     used before SharpCV 0.20's proxies, each copy stayed outstanding until the finalizer ran.
+        /// </summary>
+        [TestMethod]
+        public void ndarray_argument_temporaries_are_released_on_return()
+        {
+            using var src = cv2.imread(imgSolar);
+            using var frame = cv2.resize(src, (1920, 1080));
+            using NDArray pixels = frame.data.copy();
+            using var reversed = pixels["..., ::-1"];   // a layout OpenCV cannot view: cv2 copies it for the call
+
+            // Earlier tests' undisposed Mats would otherwise give their reports back from the finalizer mid-test.
+            Collect();
+            long outstanding = NativeMemoryTrackerOutstanding();
+            long collections = NativeMemoryTrackerCollections();
+            for (int i = 0; i < 20; i++)
+            {
+                using var gray = cv2.cvtColor(reversed, ColorConversionCodes.COLOR_RGB2GRAY);
+                Assert.AreEqual(outstanding + 1920 * 1080, NativeMemoryTrackerOutstanding(), "only the 2 MB result is held after the call");
+            }
+
+            Assert.AreEqual(outstanding, NativeMemoryTrackerOutstanding(), "every copy and result was released at once");
+            Assert.AreEqual(collections, NativeMemoryTrackerCollections(), "no collection was needed");
         }
 
         /// <summary>The tracker's collection count.</summary>

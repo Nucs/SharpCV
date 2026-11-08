@@ -24,8 +24,9 @@ namespace SharpCV
     ///     </para>
     ///     <para>
     ///     <b>Disposal.</b> Dispose a Mat when done in loops: the native header and pixels otherwise wait for the
-    ///     finalizer. A Mat created implicitly from an NDArray argument (<c>cv2.cvtColor(nd, ...)</c>) is such a
-    ///     temporary.
+    ///     finalizer (SharpCV collects once undisposed OpenCV memory grows by 64 MB, so such loops stay bounded, but a
+    ///     disposed Mat frees its pixels at once). An NDArray passed to a <c>cv2.*</c> function needs no disposal on
+    ///     SharpCV's side: the Mat made for the call is released when the call returns.
     ///     </para>
     /// </remarks>
     public partial class Mat : DisposableObject

@@ -31,16 +31,18 @@ namespace SharpCV
             => mat?.AsNDArray(MatCodecMode.View);
 
         /// <summary>
-        ///     A Mat over the array (<see cref="Mat(NDArray, MatCodecMode)"/> in <see cref="MatCodecMode.Auto"/>), so every
-        ///     <c>cv2.*</c> function accepts an NDArray as an input: shared when the layout fits, copied otherwise, as
-        ///     opencv-python does.
+        ///     A Mat over the array (<see cref="Mat(NDArray, MatCodecMode)"/> in <see cref="MatCodecMode.Auto"/>): shared
+        ///     when the layout fits, copied otherwise, as opencv-python does. The caller owns the Mat: dispose it, or it
+        ///     waits for the finalizer with any copy it made.
         /// </summary>
         /// <param name="nd">The array; null gives null.</param>
         /// <returns>The Mat, or null.</returns>
         /// <exception cref="OpenCVException">The dtype has no OpenCV depth or the array has too many dimensions.</exception>
         /// <remarks>
-        ///     Functions that write INTO their image (rectangle, putText, drawContours) have NDArray overloads instead,
-        ///     because an implicit copy would silently swallow the drawing; those demand a writeable view, as cv2 does.
+        ///     <c>cv2.*</c> functions do not go through this conversion: their image parameters are
+        ///     <see cref="InputArray"/> / <see cref="InputOutputArray"/>, which convert an NDArray for the one call and
+        ///     release it when the call returns (and draw into an NDArray in place, never into a copy). It remains for
+        ///     the places that keep a Mat (<c>Mat m = nd;</c>, a <c>Mat[]</c> of contours, <see cref="cv_api.imcrop"/>).
         /// </remarks>
         public static implicit operator Mat(NDArray nd)
             => nd is null ? null : new Mat(nd, MatCodecMode.Auto);

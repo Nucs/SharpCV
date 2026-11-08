@@ -35,9 +35,14 @@ var (contours, hierarchy) = cv2.findContours(mask, RetrievalModes.RETR_EXTERNAL,
 ```
 
 - `mat.data` (or `mat.AsNDArray()`) is a zero-copy view, shaped as opencv-python shapes its arrays: the Mat's dimensions, then the channels when there are several (`(H, W)`, `(H, W, C)`, `(1, 3, H, W)` for a dnn blob). A region of interest keeps its parent's row stride.
-- `new Mat(nd)` (and the implicit conversion every `cv2.*` argument uses) shares the array's memory when the layout fits a `cv::Mat`, and copies it otherwise (a transposed, reversed, column-strided or broadcast array), exactly like opencv-python. `MatCodecMode.View` refuses the copy, `MatCodecMode.Copy` always copies.
-- Functions that draw INTO an image (`rectangle`, `putText`, `drawContours`) take an `NDArray` as cv2 takes an output array: it must be writeable and viewable, otherwise `OpenCVException` ("Layout of the output array img is incompatible with cv::Mat").
+- `new Mat(nd)` and every `cv2.*` image argument share the array's memory when the layout fits a `cv::Mat`, and copy it otherwise (a transposed, reversed, column-strided or broadcast array), exactly like opencv-python. `MatCodecMode.View` refuses the copy, `MatCodecMode.Copy` always copies.
+- Image parameters are `InputArray` (read) or `InputOutputArray` (drawn into), like OpenCV's own C++ API: pass a `Mat` or an `NDArray`. An `NDArray` argument is converted for the one call and released when it returns, copy included, so a loop over NDArrays leaves nothing for the finalizer.
+- Functions that draw INTO an image (`rectangle`, `putText`, `drawContours`) treat an `NDArray` as cv2 treats an output array: it must be writeable and viewable, otherwise `OpenCVException` ("Layout of the output array img is incompatible with cv::Mat").
 - Lifetimes are automatic both ways: a view keeps its own reference to the pixels (it stays valid after the `Mat` is disposed), and a `Mat` made from an `NDArray` keeps a counted reference to the array.
+
+### Memory
+
+A `Mat` returned by a `cv2.*` function owns OpenCV memory the garbage collector cannot see (a 1080p frame is a small managed object over 6 MB of native pixels). Dispose results in loops (`using var gray = cv2.cvtColor(...)`) to free them at once. Code written in opencv-python style that never disposes stays bounded anyway: SharpCV counts the OpenCV memory held by live results and runs one full collection whenever it grows by 64 MB, so undisposed 1080p loops hold about 110 MB instead of growing by gigabytes. Disposed results never trigger such a collection.
 
 | OpenCV depth | NumSharp dtype | | OpenCV depth | NumSharp dtype |
 |---|---|---|---|---|
@@ -128,6 +133,7 @@ OpenCV(4.13.0) ...color.simd_helpers.hpp:92: error: (-15:Bad number of channels)
 - Defaults follow opencv-python: `getStructuringElement` anchors at the centre (MORPH_CROSS was an L-shape), `morphologyEx` uses `morphologyDefaultBorderValue()` (erosions no longer eat in from the image edge), `drawContours(Mat ...)` uses offset (0, 0), and `dnn.blobFromImage` defaults to `swapRB: false`.
 - Fixed: `rotate(img, center, ...)` turned about the top-left corner (the centre was passed as ints where OpenCV reads floats); an ROI's `data` ignored the row step; `FLIP_MODE.FLIP_VERTICAL_MODE` / `FLIP_BOTH_MODE` flipped horizontally; `VideoCapture` was freed with `FreeHGlobal`; failing calls returned an empty `Mat` silently; `waitKey` returns the key.
 - `img[8, 8]` returns an `NDArray` view; read a grayscale pixel with `(byte)img[8, 8]`.
+- Image parameters are `InputArray` / `InputOutputArray` instead of `Mat`. Passing a `Mat` or an `NDArray` compiles as before; an `IntPtr` argument (which used to convert to `Mat`) or a method group bound to the old `Mat` signature needs `new Mat(ptr)` or a lambda. `hconcat` / `vconcat` keep a `Mat[]` overload for array variables.
 
 ### Tests
 

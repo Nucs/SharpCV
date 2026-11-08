@@ -45,7 +45,7 @@ namespace SharpCV
         /// <summary>
         /// Creates 4-dimensional blob from image.
         /// </summary>
-        /// <param name="image">input image (with 1-, 3- or 4-channels).</param>
+        /// <param name="image">input image (with 1-, 3- or 4-channels): a Mat or an NDArray, read for the call.</param>
         /// <param name="scaleFactor">The multiplier applied after the mean subtraction; 1.0 as in cv2.</param>
         /// <param name="size">spatial size for output image; default (0, 0) keeps the image's</param>
         /// <param name="mean">scalar with mean values which are subtracted from channels.</param>
@@ -53,18 +53,22 @@ namespace SharpCV
         ///     false as in cv2 (it defaulted to true until SharpCV 0.20).</param>
         /// <param name="crop">flag which indicates whether image will be cropped after resize or not</param>
         /// <returns>A new NCHW float32 Mat; its <see cref="Mat.data"/> is a <c>(1, C, H, W)</c> NDArray view.</returns>
-        /// <exception cref="OpenCVException">OpenCV rejects the image.</exception>
-        public Mat blobFromImage(Mat image, double scaleFactor = 1.0, (int, int) size = default, Scalar? mean = null, bool swapRB = false, bool crop = false)
+        /// <exception cref="ArgumentNullException"><paramref name="image"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">OpenCV rejects the image, or cv2 refuses the NDArray.</exception>
+        public Mat blobFromImage(InputArray image, double scaleFactor = 1.0, (int, int) size = default, Scalar? mean = null, bool swapRB = false, bool crop = false)
         {
+            using var src = image.Open("image");
+            // dnn_blobFromImage takes the cv::Mat itself; Handle refuses a disposed Mat instead of passing OpenCV null.
+            var source = src.Mat.Handle;
             IntPtr handle = IntPtr.Zero;
-            NativeMethods.Call(() => cv2_native_api.dnn_blobFromImage(image,
+            NativeMethods.Call(() => cv2_native_api.dnn_blobFromImage(source,
                 scaleFactor,
                 new Size(size.Item1, size.Item2),
                 mean ?? new Scalar(),
                 swapRB,
                 crop,
                 out handle));
-            GC.KeepAlive(image);
             return new Mat(handle).Tracked();
         }
     }

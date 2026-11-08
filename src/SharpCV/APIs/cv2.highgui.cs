@@ -10,12 +10,17 @@ namespace SharpCV
         /// <summary><c>cv2.imshow(winname, mat)</c>: shows the image in a window (created on first use). Needs a desktop
         ///     session and a <see cref="waitKey"/> call to paint.</summary>
         /// <param name="windownName">The window title.</param>
-        /// <param name="img">The image; an NDArray converts implicitly.</param>
-        /// <exception cref="OpenCVException">OpenCV cannot show the image (no GUI backend, unsupported type).</exception>
-        public void imshow(string windownName, Mat img)
+        /// <param name="img">The image (a Mat or an NDArray; the window keeps its own copy of the pixels).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="img"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">OpenCV cannot show the image (no GUI backend, unsupported type), or cv2
+        ///     refuses the NDArray.</exception>
+        public void imshow(string windownName, InputArray img)
         {
-            NativeMethods.Call(() => cv2_native_api.highgui_imshow(windownName, img));
-            GC.KeepAlive(img);
+            using var mat = img.Open("mat");
+            // highgui_imshow takes the cv::Mat itself; Handle refuses a disposed Mat instead of passing OpenCV null.
+            var handle = mat.Mat.Handle;
+            NativeMethods.Call(() => cv2_native_api.highgui_imshow(windownName, handle));
         }
 
         /// <summary><c>cv2.namedWindow(winname, flags)</c>.</summary>

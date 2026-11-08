@@ -26,14 +26,17 @@ namespace SharpCV
         public double Nu20, Nu11, Nu02, Nu30, Nu21, Nu12, Nu03;
 
         /// <summary>Computes the moments of an image or contour (<c>cv2.moments(img, binaryImage)</c>).</summary>
-        /// <param name="img">An image (single channel) or a contour.</param>
+        /// <param name="img">An image (single channel) or a contour: a Mat or an NDArray, read for the call.</param>
         /// <param name="binaryImage">True counts every non-zero pixel as 1.</param>
-        /// <exception cref="OpenCVException">OpenCV rejects the input (a multi-channel image).</exception>
-        public Moments(Mat img, bool binaryImage = false)
+        /// <exception cref="ArgumentNullException"><paramref name="img"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
+        /// <exception cref="OpenCVException">OpenCV rejects the input (a multi-channel image), or cv2 refuses the
+        ///     NDArray.</exception>
+        public Moments(InputArray img, bool binaryImage = false)
         {
+            using var array = img.Open("array");
             NativeStruct m = default;
-            NativeMethods.Call(() => cv2_native_api.imgproc_moments(img.InputArray, binaryImage ? 1 : 0, out m));
-            GC.KeepAlive(img);
+            NativeMethods.Call(() => cv2_native_api.imgproc_moments(array.Mat.InputArray, binaryImage ? 1 : 0, out m));
             Initialize(m.m00, m.m10, m.m01, m.m20, m.m11, m.m02, m.m30, m.m21, m.m12, m.m03);
         }
 
