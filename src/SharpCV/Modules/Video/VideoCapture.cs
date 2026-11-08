@@ -50,8 +50,10 @@ namespace SharpCV
             // read() takes the cv::Mat itself, not an _OutputArray, so the cached shape is reset by hand.
             var frame = image.OutputArray;
             NativeMethods.Call(() => cv2_native_api.videoio_VideoCapture_read_OutputArray(handle, frame, out output));
-            GC.KeepAlive(image);
             GC.KeepAlive(this);
+            // OpenCV may have reallocated the frame (another size): report the buffer the Mat holds now.
+            image.TrackNativeMemory();
+            GC.KeepAlive(image);
             return (output != 0, image);
         }
 

@@ -28,7 +28,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.photo_fastNlMeansDenoising(src.InputArray, dst.OutputArray, h, templateWindowSize, searchWindowSize));
             GC.KeepAlive(src);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.fastNlMeansDenoisingColored(src, None, h, hColor, templateWindowSize, searchWindowSize)</c>:
@@ -49,7 +49,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.photo_fastNlMeansDenoisingColored(src.InputArray, dst.OutputArray, h, hColor, templateWindowSize, searchWindowSize));
             GC.KeepAlive(src);
-            return dst;
+            return dst.Tracked();
         }
     }
 }

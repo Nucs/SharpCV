@@ -131,6 +131,54 @@ namespace UnitTest
             }), $"leases released by the finalizer: {Mat.LiveViewLeases} live, baseline {baseline}");
         }
 
+        /// <summary>
+        ///     Results that are never disposed (opencv-python style) stay bounded: the native-memory tracker collects once
+        ///     the undisposed OpenCV memory climbs a budget, and the finalizers give it back. Before the tracker, 300 such
+        ///     1080p results held about 600 MB and caused no collection.
+        /// </summary>
+        [TestMethod]
+        public void undisposed_results_stay_bounded()
+        {
+            using var frame = cv2.resize(cv2.imread(imgSolar), (1920, 1080));
+            long collections = NativeMemoryTrackerCollections();
+            for (int i = 0; i < 120; i++)
+            {
+                var gray = cv2.cvtColor(frame, ColorConversionCodes.COLOR_BGR2GRAY);   // 2 MB each, never disposed
+                GC.KeepAlive(gray);
+            }
+
+            Assert.IsTrue(NativeMemoryTrackerCollections() > collections, "the tracker collected for the undisposed results");
+            Assert.IsTrue(WaitFor(() =>
+            {
+                Collect();
+                return NativeMemoryTrackerOutstanding() < 2 * 64L * 1024 * 1024;
+            }), $"outstanding native memory settles under two budgets: {NativeMemoryTrackerOutstanding() / 1048576} MB");
+        }
+
+        /// <summary>Results that ARE disposed never make the tracker collect: their reports are taken back at once.</summary>
+        [TestMethod]
+        public void disposed_results_never_trigger_a_collection()
+        {
+            using var frame = cv2.resize(cv2.imread(imgSolar), (1920, 1080));
+            long collections = NativeMemoryTrackerCollections();
+            long outstanding = NativeMemoryTrackerOutstanding();
+            for (int i = 0; i < 120; i++)
+            {
+                using var gray = cv2.cvtColor(frame, ColorConversionCodes.COLOR_BGR2GRAY);
+            }
+
+            Assert.AreEqual(collections, NativeMemoryTrackerCollections(), "no collection for disposed results");
+            Assert.IsTrue(NativeMemoryTrackerOutstanding() <= outstanding + 6L * 1024 * 1024, "every report was taken back");
+        }
+
+        /// <summary>The tracker's collection count.</summary>
+        /// <returns>The count.</returns>
+        private static long NativeMemoryTrackerCollections() => NativeMemoryTracker.Collections;
+
+        /// <summary>The tracker's outstanding bytes.</summary>
+        /// <returns>The bytes.</returns>
+        private static long NativeMemoryTrackerOutstanding() => NativeMemoryTracker.Outstanding;
+
         /// <summary>A disposed Mat refuses further use instead of handing OpenCV a null header.</summary>
         [TestMethod]
         public void disposed_mat_throws()

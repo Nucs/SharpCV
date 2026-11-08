@@ -183,6 +183,22 @@ namespace SharpCV
         [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ExceptionStatus core_Mat_elemSize1(IntPtr mat, out nuint output);
 
+        /// <summary><c>mat.datastart</c>: the first byte of the buffer the header references (an ROI's parent buffer
+        ///     start, not its own first pixel).</summary>
+        /// <param name="mat">The Mat.</param>
+        /// <param name="output">Receives the address (null for an empty Mat).</param>
+        /// <returns>The call status.</returns>
+        [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern unsafe ExceptionStatus core_Mat_datastart(IntPtr mat, out byte* output);
+
+        /// <summary><c>mat.datalimit</c>: one past the last byte of the buffer the header references, so
+        ///     <c>datalimit - datastart</c> is the whole allocation.</summary>
+        /// <param name="mat">The Mat.</param>
+        /// <param name="output">Receives the address (null for an empty Mat).</param>
+        /// <returns>The call status.</returns>
+        [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern unsafe ExceptionStatus core_Mat_datalimit(IntPtr mat, out byte* output);
+
         /// <summary><c>mat.empty()</c>: true when the Mat has no pixels.</summary>
         /// <param name="mat">The Mat.</param>
         /// <param name="output">Receives 1 for an empty Mat, 0 otherwise.</param>

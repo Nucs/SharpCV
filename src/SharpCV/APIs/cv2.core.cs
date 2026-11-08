@@ -27,7 +27,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.core_flip(img.InputArray, dst.OutputArray, (int)mode));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.rotate(src, rotateCode)</c>: rotates by a multiple of 90 degrees (no interpolation).</summary>
@@ -40,7 +40,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.core_rotate(img.InputArray, dst.OutputArray, (int)flags));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.split(m)</c>: one single-channel image per channel, each a COPY (a NumSharp channel view
@@ -67,7 +67,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.core_hconcat1(imgs.Select(x => (IntPtr)x).ToArray(), (uint)imgs.Length, dst.OutputArray));
             GC.KeepAlive(imgs);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.vconcat(src)</c>: the images stacked vertically (same width and type).</summary>
@@ -79,7 +79,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.core_vconcat1(imgs.Select(x => (IntPtr)x).ToArray(), (uint)imgs.Length, dst.OutputArray));
             GC.KeepAlive(imgs);
-            return dst;
+            return dst.Tracked();
         }
     }
 }

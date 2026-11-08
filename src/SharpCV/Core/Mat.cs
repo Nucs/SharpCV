@@ -48,6 +48,78 @@ namespace SharpCV
         ///     read this Mat but never write it through <see cref="OutputArray"/>.</summary>
         private bool _sourceReadOnly;
 
+        /// <summary>The first byte of <see cref="_source"/>'s memory the header was built over, to tell a Mat that still
+        ///     views NumSharp memory from one OpenCV has since reallocated (only the latter is reported to the GC).</summary>
+        private IntPtr _sourceData;
+
+        /// <summary>
+        ///     Below this many bytes a buffer is not reported to <see cref="NativeMemoryTracker"/>: the report would cost
+        ///     more than the memory it describes (contours, kernels, affine matrices).
+        /// </summary>
+        internal const long PressureThreshold = 16 * 1024;
+
+        /// <summary>
+        ///     The OpenCV-allocated bytes this Mat has reported to <see cref="NativeMemoryTracker"/> (0 for none); taken back
+        ///     when the header is freed, so the reports always balance.
+        /// </summary>
+        private long _pressure;
+
+        /// <summary>
+        ///     The bytes of the NumSharp copy this Mat owns (an implicit NDArray conversion of a layout OpenCV cannot view),
+        ///     reported to <see cref="NativeMemoryTracker"/> until the Mat dies: such a temporary used to sit in the
+        ///     finalizer queue with its full copy (+170 MB over 300 1080p calls).
+        /// </summary>
+        private long _copyPressure;
+
+        /// <summary>
+        ///     Reports the native pixel memory this Mat keeps alive to <see cref="NativeMemoryTracker"/>, for a Mat whose
+        ///     buffer OpenCV allocated (a function's result, a decoded image, a video frame), so that undisposed results
+        ///     get collected instead of growing without bound.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The Mat was disposed.</exception>
+        /// <remarks>
+        ///     Call it after every OpenCV call that may have (re)allocated the Mat; it reports the difference from the last
+        ///     report, so calling it again after an in-place call reports nothing. A buffer shared with other headers (an
+        ///     ROI, an NDArray view) is reported once, by the Mat that received it.
+        /// </remarks>
+        internal void TrackNativeMemory()
+        {
+            long bytes = OwnedNativeBytes();
+            long delta = bytes - _pressure;
+            _pressure = bytes;
+            if (delta > 0)
+                NativeMemoryTracker.Add(delta);
+            else if (delta < 0)
+                NativeMemoryTracker.Remove(-delta);
+        }
+
+        /// <summary><see cref="TrackNativeMemory"/> for a wrapper's return statement: <c>return dst.Tracked();</c>.</summary>
+        /// <returns>This Mat.</returns>
+        /// <exception cref="ObjectDisposedException">The Mat was disposed.</exception>
+        internal Mat Tracked()
+        {
+            TrackNativeMemory();
+            return this;
+        }
+
+        /// <summary>
+        ///     The bytes of the OpenCV buffer this header references (<c>datalimit - datastart</c>, the whole allocation),
+        ///     or 0 when there is none to report: an empty Mat, NumSharp memory (NumSharp accounts for its own), or a buffer
+        ///     under <see cref="PressureThreshold"/>.
+        /// </summary>
+        /// <returns>The bytes to report.</returns>
+        /// <exception cref="ObjectDisposedException">The Mat was disposed.</exception>
+        private unsafe long OwnedNativeBytes()
+        {
+            var handle = Handle;
+            NativeMethods.Check(cv2_native_api.core_Mat_datastart(handle, out byte* start));
+            NativeMethods.Check(cv2_native_api.core_Mat_datalimit(handle, out byte* limit));
+            if (start == null || limit <= start || (IntPtr)start == _sourceData)
+                return 0;
+            long bytes = limit - start;
+            return bytes >= PressureThreshold ? bytes : 0;
+        }
+
         /// <summary>
         ///     A zero-copy <see cref="NDArray"/> over the pixels, shaped as opencv-python shapes its arrays: the Mat's
         ///     dimensions, then the channels when there are more than one (<c>(410, 730, 3)</c> uint8 for a BGR image,
@@ -435,6 +507,14 @@ namespace SharpCV
 
             _intputArray = IntPtr.Zero;
             _outputArray = IntPtr.Zero;
+
+            // The header no longer keeps the buffer alive (an NDArray view's own lease may): balance the reports. The
+            // NumSharp copy dies with this Mat too (disposed next, or finalized in the same collection).
+            long released = _pressure + _copyPressure;
+            _pressure = 0;
+            _copyPressure = 0;
+            if (released > 0)
+                NativeMemoryTracker.Remove(released);
         }
 
         /// <summary>
@@ -509,6 +589,7 @@ namespace SharpCV
             {
                 _source = parent._source.view();
                 _sourceReadOnly = parent._sourceReadOnly;
+                _sourceData = parent._sourceData;
             }
         }
 

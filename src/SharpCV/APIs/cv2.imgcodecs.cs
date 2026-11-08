@@ -22,7 +22,7 @@ namespace SharpCV
         {
             IntPtr handle = IntPtr.Zero;
             NativeMethods.Call(() => cv2_native_api.imgcodecs_imread(filename, (int)flags, out handle));
-            return new Mat(handle);
+            return new Mat(handle).Tracked();
         }
 
         /// <summary><c>cv2.imwrite(filename, img, params)</c>: encodes by the file extension and writes the file.</summary>
@@ -69,7 +69,7 @@ namespace SharpCV
             IntPtr handle = IntPtr.Zero;
             NativeMethods.Call(() => cv2_native_api.imgcodecs_imdecode_InputArray(buf.InputArray, (int)flags, out handle));
             GC.KeepAlive(buf);
-            return new Mat(handle);
+            return new Mat(handle).Tracked();
         }
 
         /// <summary>
@@ -155,7 +155,7 @@ namespace SharpCV
                     IntPtr address = (IntPtr)pBuf;
                     IntPtr ret = IntPtr.Zero;
                     NativeMethods.Call(() => cv2_native_api.imgcodecs_imdecode_vector((byte*)address, span.Length, flags, out ret));
-                    return new Mat(ret);
+                    return new Mat(ret).Tracked();
                 }
             }
         }

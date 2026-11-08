@@ -60,6 +60,11 @@ namespace SharpCV
             cv2_native_api.vector_Mat_assignToArray(_handle, dstPtr);
             GC.KeepAlive(this);
 
+            // Each element now shares its buffer with the vector, which is deleted next: the Mats become the owners the
+            // GC must hear about (split planes are full-size images).
+            foreach (var m in dst)
+                m.TrackNativeMemory();
+
             return dst;
         }
 

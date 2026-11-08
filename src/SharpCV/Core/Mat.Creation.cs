@@ -79,6 +79,19 @@ namespace SharpCV
 
             _handle = handle;
             _sourceReadOnly = !plan.Source.Shape.IsWriteable;
+            _sourceData = plan.Data;
+            if (plan.Copied)
+            {
+                // A copy only this Mat references: count it until the Mat dies, so temporaries left to the finalizer
+                // cannot pile up unseen.
+                long bytes = plan.Source.size * plan.Source.itemsize;
+                if (bytes >= PressureThreshold)
+                {
+                    _copyPressure = bytes;
+                    NativeMemoryTracker.Add(bytes);
+                }
+            }
+
             _source = plan.TakeSource();
         }
 

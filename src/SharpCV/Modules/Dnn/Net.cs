@@ -68,7 +68,7 @@ namespace SharpCV
             using var shared = new Mat(output);
             IntPtr clone = IntPtr.Zero;
             NativeMethods.Call(() => cv2_native_api.core_Mat_clone(output, out clone));
-            return new Mat(clone);
+            return new Mat(clone).Tracked();
         }
 
         /// <summary>Deletes the native network.</summary>

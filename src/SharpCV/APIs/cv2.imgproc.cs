@@ -24,7 +24,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.imgproc_cvtColor(img.InputArray, dst.OutputArray, (int)code, dstCnt));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.contourArea(contour, oriented)</c>.</summary>
@@ -66,7 +66,7 @@ namespace SharpCV
                 blockSize,
                 delta));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.threshold(src, thresh, maxval, type)</c>.</summary>
@@ -82,7 +82,7 @@ namespace SharpCV
             double ret = 0;
             NativeMethods.Call(() => cv2_native_api.imgproc_threshold(img.InputArray, dst.OutputArray, thresh, maxval, (int)type, out ret));
             GC.KeepAlive(img);
-            return (ret, dst);
+            return (ret, dst.Tracked());
         }
 
         /// <summary><c>cv2.pyrUp(src)</c>: upsamples by two and blurs.</summary>
@@ -97,7 +97,7 @@ namespace SharpCV
                 new Size(),
                 (int)BorderTypes.BORDER_DEFAULT));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.pyrUp(src, dstsize, borderType)</c>.</summary>
@@ -116,7 +116,7 @@ namespace SharpCV
                 new Size(dstSize.Item1, dstSize.Item2),
                 (int)borderType));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.pyrDown(src, dstsize, borderType)</c>.</summary>
@@ -135,7 +135,7 @@ namespace SharpCV
                 new Size(dstSize.Item1, dstSize.Item2),
                 (int)borderType));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.pyrDown(src)</c>: blurs and downsamples by two (rounding the size up).</summary>
@@ -150,7 +150,7 @@ namespace SharpCV
                 new Size(),
                 (int)BorderTypes.BORDER_DEFAULT));
             GC.KeepAlive(img);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.resize(src, dsize, fx, fy, interpolation)</c>.</summary>
@@ -176,7 +176,7 @@ namespace SharpCV
                 (int)interpolation));
             GC.KeepAlive(img);
 
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary>
@@ -218,7 +218,7 @@ namespace SharpCV
                 (int)borderMode, scalar));
             GC.KeepAlive(img);
 
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.getRotationMatrix2D(center, angle, scale)</c>: the 2 x 3 float64 affine matrix of a rotation
@@ -256,7 +256,7 @@ namespace SharpCV
                 dsize, (int)flags, (int)borderMode, borderValue ?? new Scalar()));
             GC.KeepAlive(src);
             GC.KeepAlive(M);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.rectangle(img, pt1, pt2, color, thickness, lineType, shift)</c>: draws INTO the image.</summary>
@@ -440,7 +440,7 @@ namespace SharpCV
                 borderValue ?? Scalar.MorphologyDefaultBorderValue));
             GC.KeepAlive(src);
             GC.KeepAlive(kernel);
-            return output;
+            return output.Tracked();
         }
 
         /// <summary>
@@ -728,7 +728,7 @@ namespace SharpCV
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.imgproc_medianBlur(src.InputArray, dst.OutputArray, kSize));
             GC.KeepAlive(src);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.filter2D(src, ddepth, kernel, anchor, delta, borderType)</c>: correlates the image with the
@@ -761,7 +761,7 @@ namespace SharpCV
                 borderType));
             GC.KeepAlive(src);
             GC.KeepAlive(kernel);
-            return dst;
+            return dst.Tracked();
         }
 
         /// <summary><c>cv2.blur(src, ksize, anchor, borderType)</c>: the normalized box filter.</summary>
@@ -785,7 +785,7 @@ namespace SharpCV
                 anchor.Value,
                 borderType));
             GC.KeepAlive(src);
-            return dst;
+            return dst.Tracked();
         }
     }
 }

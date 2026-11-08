@@ -65,7 +65,7 @@ namespace SharpCV
                 crop,
                 out handle));
             GC.KeepAlive(image);
-            return new Mat(handle);
+            return new Mat(handle).Tracked();
         }
     }
 }
