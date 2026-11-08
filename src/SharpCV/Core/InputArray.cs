@@ -68,7 +68,7 @@ namespace SharpCV
                 return new MatArgument(Mat, temporary: false);
             // `is not null`: NDArray overloads != element-wise.
             if (Array is not null)
-                return new MatArgument(new Mat(Array, MatCodecMode.Auto, name, output: false, ndMat), temporary: true);
+                return new MatArgument(SharpCV.Mat.ForCall(Array, name, ndMat), temporary: true);
             throw new ArgumentNullException(name);
         }
     }

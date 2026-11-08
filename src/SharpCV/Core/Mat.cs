@@ -45,6 +45,12 @@ namespace SharpCV
         /// </summary>
         private NDArray _source;
 
+        /// <summary>
+        ///     True when <see cref="_source"/> is the CALLER's array, borrowed by a Mat made for one call
+        ///     (<see cref="ForCall"/>, <see cref="ForOutput"/>): referenced so it stays reachable, never disposed here.
+        /// </summary>
+        private bool _sourceBorrowed;
+
         /// <summary>True when <see cref="_source"/> is not writeable (a broadcast or read-only array): OpenCV may then
         ///     read this Mat but never write it through <see cref="OutputArray"/>.</summary>
         private bool _sourceReadOnly;
@@ -239,10 +245,12 @@ namespace SharpCV
             {
                 if(_intputArray == IntPtr.Zero)
                 {
-                    var handle = Handle;
-                    IntPtr ia = IntPtr.Zero;
-                    NativeMethods.Call(() => cv2_native_api.core_InputArray_new_byMat(handle, out ia));
-                    _intputArray = ia;
+                    // A static lambda over (header, wrapper slot): every argument of every call creates this wrapper,
+                    // and a closure cost two objects each time.
+                    var call = (Mat: Handle, Wrapper: IntPtr.Zero);
+                    NativeMethods.Call(ref call, static (ref (IntPtr Mat, IntPtr Wrapper) s) =>
+                        cv2_native_api.core_InputArray_new_byMat(s.Mat, out s.Wrapper));
+                    _intputArray = call.Wrapper;
                 }
                 return _intputArray;
             }
@@ -269,10 +277,11 @@ namespace SharpCV
                 InvalidateCaches();
                 if(_outputArray == IntPtr.Zero)
                 {
-                    var handle = Handle;
-                    IntPtr oa = IntPtr.Zero;
-                    NativeMethods.Call(() => cv2_native_api.core_OutputArray_new_byMat(handle, out oa));
-                    _outputArray = oa;
+                    // Closure-free for the same reason as InputArray: every result Mat creates this wrapper.
+                    var call = (Mat: Handle, Wrapper: IntPtr.Zero);
+                    NativeMethods.Call(ref call, static (ref (IntPtr Mat, IntPtr Wrapper) s) =>
+                        cv2_native_api.core_OutputArray_new_byMat(s.Mat, out s.Wrapper));
+                    _outputArray = call.Wrapper;
                 }
                 return _outputArray;
             }
@@ -531,7 +540,9 @@ namespace SharpCV
             {
                 // The Mat's own view holds a lease of its own; aliases handed out keep theirs.
                 Interlocked.Exchange(ref _cache, null)?.Dispose();
-                _source?.Dispose();
+                // A borrowed array belongs to the caller of the call this Mat was made for.
+                if (!_sourceBorrowed)
+                    _source?.Dispose();
                 _source = null;
             }
         }

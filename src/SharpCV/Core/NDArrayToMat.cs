@@ -30,13 +30,22 @@ namespace SharpCV
 
         /// <summary>
         ///     The array the Mat views: a counted NumSharp view of the caller's array (so disposing the caller's
-        ///     reference does not free the pixels under the Mat), or the copy made for it. The plan owns it until
-        ///     <see cref="TakeSource"/> hands it to the <see cref="Mat"/>; disposing the plan before that releases it.
+        ///     reference does not free the pixels under the Mat), the caller's array itself when <see cref="Borrowed"/>,
+        ///     or the copy made for it. The plan owns a view or a copy until <see cref="TakeSource"/> hands it to the
+        ///     <see cref="Mat"/>; disposing the plan before that releases it.
         /// </summary>
         public NDArray Source { get; private set; }
 
+        /// <summary>
+        ///     True when <see cref="Source"/> IS the caller's array, which the plan and the Mat reference but never
+        ///     dispose: a Mat made for one call (an <see cref="InputArray"/> argument, a drawing target) lives no longer
+        ///     than the caller's own reference, so the counted view, a NumSharp alias that costs about as much as the
+        ///     rest of a small call's conversion, buys nothing there.
+        /// </summary>
+        public bool Borrowed { get; private set; }
+
         /// <summary>Hands <see cref="Source"/> to the Mat that now views it; the plan no longer releases it.</summary>
-        /// <returns>The array the Mat must keep and dispose.</returns>
+        /// <returns>The array the Mat must keep (and dispose unless <see cref="Borrowed"/>).</returns>
         public NDArray TakeSource()
         {
             var source = Source;
@@ -44,10 +53,12 @@ namespace SharpCV
             return source;
         }
 
-        /// <summary>Releases <see cref="Source"/> when no Mat took it (the native header could not be built).</summary>
+        /// <summary>Releases <see cref="Source"/> when no Mat took it (the native header could not be built); a borrowed
+        ///     array is the caller's and stays untouched.</summary>
         public void Dispose()
         {
-            Source?.Dispose();
+            if (!Borrowed)
+                Source?.Dispose();
             Source = null;
         }
 
@@ -82,7 +93,10 @@ namespace SharpCV
         ///     writes.</param>
         /// <param name="ndMat">True for an n-D blob argument (cv2's <c>CV_ND</c>, e.g. <c>Net.setInput</c>): a 3-D
         ///     array stays three dimensions instead of becoming a multi-channel image.</param>
-        /// <returns>The plan; the caller owns <see cref="Source"/>.</returns>
+        /// <param name="borrow">True when the Mat lives for one call only: a viewable array is then referenced as it is
+        ///     (<see cref="Borrowed"/>) instead of through a counted view. Never for a Mat the caller keeps: it must
+        ///     survive the caller disposing its own reference.</param>
+        /// <returns>The plan; the caller owns <see cref="Source"/> unless it is <see cref="Borrowed"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
         /// <exception cref="OpenCVException">
         ///     <see cref="ErrorCode.StsBadArg"/>, worded as cv2 words it, when: an output array is read-only; the dtype has
@@ -90,7 +104,7 @@ namespace SharpCV
         ///     than <see cref="int.MaxValue"/>; or a copy is needed for an output array or under
         ///     <see cref="MatCodecMode.View"/>.
         /// </exception>
-        public static NDArrayToMat Plan(NDArray nd, MatCodecMode mode, string name, bool output, bool ndMat)
+        public static NDArrayToMat Plan(NDArray nd, MatCodecMode mode, string name, bool output, bool ndMat, bool borrow = false)
         {
             if (nd is null)
                 throw new ArgumentNullException(name);
@@ -118,8 +132,11 @@ namespace SharpCV
                 throw OpenCVException.BadArgument($"{name} dimensionality (={ndims}) is too high");
 
             long elemsize = depth.ElemSize1();
-            long[] sizes = nd.shape;
-            long[] strides = nd.strides;
+            // Shape's own dimension array (shared with the array: only read here) and the byte strides in a stack
+            // buffer: nd.shape and nd.strides each allocate a fresh array per call.
+            long[] sizes = nd.Shape.dimensions;
+            Span<long> strides = stackalloc long[Math.Max(ndims, 1)];
+            ByteStrides(nd, strides);
 
             bool ismultichannel = ndims == 3 && sizes[2] <= MatTypeExtensions.CV_CN_MAX && !ndMat;
 
@@ -164,12 +181,15 @@ namespace SharpCV
                 // PyArray_Cast / PyArray_GETCONTIGUOUS: a C-ordered copy (numpy's PyArray_Cast passes is_f_order = 0).
                 source = needcast ? nd.astype(np.int32, true, 'C') : nd.copy('C');
                 plan.Copied = true;
-                strides = source.strides;
+                // The copy has the same shape and its own (C-order, possibly int32) strides.
+                ByteStrides(source, strides);
             }
             else
             {
-                // A counted view: the caller may dispose its own reference while the Mat still reads the pixels.
-                source = nd.view();
+                // A call-scoped Mat borrows the caller's array; any other Mat takes a counted view, so the caller may
+                // dispose its own reference while the Mat still reads the pixels.
+                source = borrow ? nd : nd.view();
+                plan.Borrowed = borrow;
             }
 
             try
@@ -208,7 +228,9 @@ namespace SharpCV
                 plan.Steps = step;
                 unsafe
                 {
-                    plan.Data = (IntPtr)source.data.Pointer;
+                    // np.MemoryView.Pointer's formula (the storage base plus the view's offset) without allocating the
+                    // MemoryView that nd.data hands out.
+                    plan.Data = (IntPtr)(source.Unsafe.Storage.Address + source.Shape.Offset * source.dtypesize);
                 }
 
                 plan.Source = source;
@@ -216,10 +238,24 @@ namespace SharpCV
             }
             catch
             {
-                // The plan never reached a Mat: release the view or copy made above at once.
-                source.Dispose();
+                // The plan never reached a Mat: release the view or copy made above at once (a borrowed array is the
+                // caller's).
+                if (!plan.Borrowed)
+                    source.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>Writes <paramref name="nd"/>'s byte strides (<see cref="NDArray.strides"/>'s values, the element
+        ///     strides times the item size) into <paramref name="strides"/> without allocating.</summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="strides">At least <c>nd.ndim</c> slots.</param>
+        private static void ByteStrides(NDArray nd, Span<long> strides)
+        {
+            long[] elementStrides = nd.Shape.strides;
+            long itemsize = nd.itemsize;
+            for (int i = 0; i < elementStrides.Length; i++)
+                strides[i] = elementStrides[i] * itemsize;
         }
     }
 }

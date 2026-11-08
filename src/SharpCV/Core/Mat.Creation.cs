@@ -14,8 +14,10 @@ namespace SharpCV
         /// <exception cref="DllNotFoundException">No OpenCvSharpExtern runtime package is installed.</exception>
         public Mat()
         {
+            // Every wrapper call makes one of these for its result: a static lambda over the handle slot allocates
+            // nothing, where a closure cost two objects per call.
             IntPtr handle = IntPtr.Zero;
-            NativeMethods.Call(() => cv2_native_api.core_Mat_new1(out handle));
+            NativeMethods.Call(ref handle, static (ref IntPtr h) => cv2_native_api.core_Mat_new1(out h));
             _handle = handle;
         }
 
@@ -56,7 +58,7 @@ namespace SharpCV
         ///     refuses to serve as an OpenCV output.
         /// </remarks>
         public Mat(NDArray nd, MatCodecMode mode = MatCodecMode.Auto)
-            : this(nd, mode, "array", output: false, ndMat: false)
+            : this(nd, mode, "array", output: false, ndMat: false, borrow: false)
         {
         }
 
@@ -68,16 +70,22 @@ namespace SharpCV
         /// <param name="name">The argument name used in refusal messages.</param>
         /// <param name="output">True when OpenCV writes into the array (it must be writeable and viewable).</param>
         /// <param name="ndMat">True for an n-D blob argument: no multi-channel folding.</param>
+        /// <param name="borrow">True for a Mat that lives for one call (<see cref="ForCall"/>, <see cref="ForOutput"/>):
+        ///     a viewable array is referenced as it is instead of through a counted NumSharp view, and never disposed by
+        ///     this Mat. A borrowing Mat must not outlive the caller's own reference to <paramref name="nd"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
         /// <exception cref="OpenCVException">A cv2 conversion refusal, or OpenCV failed to build the header.</exception>
-        internal Mat(NDArray nd, MatCodecMode mode, string name, bool output, bool ndMat)
+        internal Mat(NDArray nd, MatCodecMode mode, string name, bool output, bool ndMat, bool borrow)
         {
             // The plan owns its view or copy until TakeSource; if the native header fails, disposing the plan releases it.
-            using var plan = NDArrayToMat.Plan(nd, mode, name, output, ndMat);
-            IntPtr handle = IntPtr.Zero;
-            NativeMethods.Call(() => cv2_native_api.core_Mat_new9(plan.Dims, plan.Sizes, plan.Type, plan.Data, plan.Steps, out handle));
+            using var plan = NDArrayToMat.Plan(nd, mode, name, output, ndMat, borrow);
+            // The plan travels as the state of a static lambda: no closure for the call every NDArray argument makes.
+            var call = (Plan: plan, Handle: IntPtr.Zero);
+            NativeMethods.Call(ref call, static (ref (NDArrayToMat Plan, IntPtr Handle) s) =>
+                cv2_native_api.core_Mat_new9(s.Plan.Dims, s.Plan.Sizes, s.Plan.Type, s.Plan.Data, s.Plan.Steps, out s.Handle));
 
-            _handle = handle;
+            _handle = call.Handle;
+            _sourceBorrowed = plan.Borrowed;
             _sourceReadOnly = !plan.Source.Shape.IsWriteable;
             _sourceData = plan.Data;
             if (plan.Copied)
@@ -106,8 +114,24 @@ namespace SharpCV
         /// <exception cref="OpenCVException">The array is read-only ("marked as output argument, but provided NumPy
         ///     array marked as readonly"), its dtype has no depth, or its layout would need a copy ("Layout of the output
         ///     array img is incompatible with cv::Mat").</exception>
+        /// <remarks>Lives for one call, so it borrows <paramref name="nd"/> instead of taking a counted view.</remarks>
         internal static Mat ForOutput(NDArray nd, string name)
-            => new Mat(nd, MatCodecMode.View, name, output: true, ndMat: false);
+            => new Mat(nd, MatCodecMode.View, name, output: true, ndMat: false, borrow: true);
+
+        /// <summary>
+        ///     The Mat for an NDArray that one OpenCV call READS (an <see cref="InputArray"/> argument): shared when the
+        ///     layout fits, copied otherwise, as cv2 converts an input array, and disposed when the call returns.
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="name">The argument name used in refusal messages.</param>
+        /// <param name="ndMat">True for an n-D blob argument: no multi-channel folding.</param>
+        /// <returns>The Mat; dispose it right after the call.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="OpenCVException">The dtype has no depth, or the array has too many dimensions.</exception>
+        /// <remarks>Borrows <paramref name="nd"/> when it is viewable (no counted view): the caller holds the array
+        ///     for the length of the call anyway.</remarks>
+        internal static Mat ForCall(NDArray nd, string name, bool ndMat)
+            => new Mat(nd, MatCodecMode.Auto, name, output: false, ndMat, borrow: true);
 
         //this method copies Mat to a new NDArray
         /// <summary>The pixels as an independent C-contiguous copy (<see cref="AsNDArray"/> with

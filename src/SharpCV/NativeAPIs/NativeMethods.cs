@@ -167,6 +167,49 @@ namespace SharpCV
                 throw TakeError(before, null);
         }
 
+        /// <summary>A native call that reads its arguments from, and writes its <c>out</c> results into, one state
+        ///     value.</summary>
+        /// <typeparam name="TState">The state: a handle, or a tuple of arguments and result slots.</typeparam>
+        /// <param name="state">The state, passed by reference so the call's <c>out</c> arguments land in it.</param>
+        /// <returns>The export's status.</returns>
+        internal delegate ExceptionStatus StateCall<TState>(ref TState state);
+
+        /// <summary>
+        ///     <see cref="Call(Func{ExceptionStatus})"/> without the closure: the arguments travel in
+        ///     <paramref name="state"/>, so a <c>static</c> lambda (which the compiler caches) is all the call needs, and
+        ///     it allocates nothing. Used on the paths every wrapper call takes (a Mat header, an NDArray argument's
+        ///     header, the <c>_InputArray</c> / <c>_OutputArray</c> wrappers), where a closure and its delegate were two
+        ///     of the allocations of each call.
+        /// </summary>
+        /// <typeparam name="TState">The state type; a value type keeps the call allocation-free.</typeparam>
+        /// <param name="state">The arguments and result slots; result slots hold valid values only when this method
+        ///     returns normally.</param>
+        /// <param name="nativeCall">The call, as a <c>static</c> lambda.</param>
+        /// <exception cref="OpenCVException">OpenCV raised an error inside the call.</exception>
+        /// <exception cref="DllNotFoundException">The native library cannot be loaded.</exception>
+        /// <exception cref="NotSupportedException">The loaded library is not the verified OpenCV version.</exception>
+        /// <remarks>The same keep-alive rule as <see cref="Call(Func{ExceptionStatus})"/>: the state carries raw handles,
+        ///     so the caller keeps their wrappers reachable until this method returns.</remarks>
+        internal static void Call<TState>(ref TState state, StateCall<TState> nativeCall)
+        {
+            Initialize();
+            _threadError = null;
+            long before = Interlocked.Read(ref _sequence);
+            ExceptionStatus status;
+            try
+            {
+                status = nativeCall(ref state);
+            }
+            catch (SEHException e)
+            {
+                // Windows: the C++ exception crossed the P/Invoke boundary; the callback has recorded it already.
+                throw TakeError(before, e);
+            }
+
+            if (status != ExceptionStatus.NotOccurred)
+                throw TakeError(before, null);
+        }
+
         /// <summary>
         ///     Checks the status of an export that cannot raise in practice (a header field getter such as
         ///     <c>core_Mat_dims</c>), without <see cref="Call"/>'s closure: the layout of a Mat is read with up to a dozen
