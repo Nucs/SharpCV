@@ -178,8 +178,12 @@ namespace SharpCV
                         : $"Layout of the array {name} is incompatible with cv::Mat, and MatCodecMode.View refuses the copy");
                 }
 
-                // PyArray_Cast / PyArray_GETCONTIGUOUS: a C-ordered copy (numpy's PyArray_Cast passes is_f_order = 0).
-                source = needcast ? nd.astype(np.int32, true, 'C') : nd.copy('C');
+                // PyArray_Cast / PyArray_GETCONTIGUOUS: a C-ordered copy (numpy's PyArray_Cast passes is_f_order = 0). A
+                // reversed image view (img[..., ::-1], a flip) gets the same copy from OpenCV's own permutation kernels,
+                // several times faster than the strided gather; every other layout takes NumSharp's copy.
+                source = needcast
+                    ? nd.astype(np.int32, true, 'C')
+                    : ReversedLayoutCopy.TryCopy(nd, depth, ismultichannel, strides) ?? nd.copy('C');
                 plan.Copied = true;
                 // The copy has the same shape and its own (C-order, possibly int32) strides.
                 ByteStrides(source, strides);

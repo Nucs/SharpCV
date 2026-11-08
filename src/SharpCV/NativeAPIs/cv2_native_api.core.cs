@@ -258,6 +258,22 @@ namespace SharpCV
         [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ExceptionStatus core_flip(IntPtr mat, IntPtr dst, int mode);
 
+        /// <summary>
+        ///     <c>cv::mixChannels(srcVec, dstVec, fromTo, npairs)</c> (OpenCvSharpExtern 4.13 core.h:
+        ///     <c>core_mixChannels(cv::Mat** src, uint32_t nsrcs, cv::Mat** dst, uint32_t ndsts, int* fromTo,
+        ///     uint32_t npairs)</c>): copies channel <c>fromTo[2k]</c> of the sources into channel <c>fromTo[2k+1]</c> of
+        ///     the destinations. The destinations must already be allocated with the right size and depth.
+        /// </summary>
+        /// <param name="src">The source headers (<c>cv::Mat*</c>, not <c>_InputArray</c>).</param>
+        /// <param name="nsrcs">The source count.</param>
+        /// <param name="dst">The destination headers.</param>
+        /// <param name="ndsts">The destination count.</param>
+        /// <param name="fromTo">The channel pairs, flattened.</param>
+        /// <param name="npairs">The pair count (half of <paramref name="fromTo"/>'s length).</param>
+        /// <returns>The call status.</returns>
+        [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ExceptionStatus core_mixChannels(IntPtr[] src, uint nsrcs, IntPtr[] dst, uint ndsts, int[] fromTo, uint npairs);
+
         /// <summary><c>cv::hconcat</c> over an array of Mats.</summary>
         /// <param name="src">The Mats (cv::Mat pointers, not argument wrappers).</param>
         /// <param name="nsrc">Their count.</param>

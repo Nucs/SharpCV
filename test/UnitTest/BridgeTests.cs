@@ -190,6 +190,68 @@ namespace UnitTest
             Oracle.Run(() => Oracle.AssertSame(Oracle.cv2.dnn.blobFromImage(img, 1 / 255.0, (64, 48), swapRB: true), view, "blobFromImage"));
         }
 
+        /// <summary>
+        ///     Reversed image views big enough for the OpenCV permutation route (<see cref="ReversedLayoutCopy"/>), in every
+        ///     depth: the channel order with 2, 3 and 4 channels, rows, columns and both. The Mat must hold exactly the
+        ///     bytes of NumSharp's C-ordered copy (random bit patterns, so float NaN payloads, infinities, subnormals and
+        ///     negative zeros are among them), and the route must have engaged; two permutations at once stay on
+        ///     NumSharp's gather.
+        /// </summary>
+        [TestMethod]
+        public void reversed_views_copy_through_opencv_byte_for_byte()
+        {
+            foreach (var name in new[] { "uint8", "int8", "uint16", "int16", "int32", "float16", "float32", "float64" })
+            {
+                var dtype = np.dtype(name);
+                foreach (int channels in new[] { 2, 3, 4 })
+                {
+                    using var image = RandomBits(dtype, new Shape(48, 64, channels));
+                    CheckReversedCopy(image["..., ::-1"], engages: true, $"{name} x{channels} [..., ::-1]");
+                    CheckReversedCopy(image["::-1"], engages: true, $"{name} x{channels} [::-1]");
+                    CheckReversedCopy(image[":, ::-1"], engages: true, $"{name} x{channels} [:, ::-1]");
+                    CheckReversedCopy(image["::-1, ::-1"], engages: true, $"{name} x{channels} [::-1, ::-1]");
+                    CheckReversedCopy(image["::-1, :, ::-1"], engages: false, $"{name} x{channels} [::-1, :, ::-1]");
+                }
+
+                using var plane = RandomBits(dtype, new Shape(96, 64));
+                CheckReversedCopy(plane["::-1"], engages: true, $"{name} 2-D [::-1]");
+                CheckReversedCopy(plane[":, ::-1"], engages: true, $"{name} 2-D [:, ::-1]");
+                CheckReversedCopy(plane["::-1, ::-1"], engages: true, $"{name} 2-D [::-1, ::-1]");
+                // A reversed AND strided axis is not one cv::Mat views even un-reversed: NumSharp's gather.
+                CheckReversedCopy(plane[":, ::-2"], engages: false, $"{name} 2-D [:, ::-2]");
+            }
+        }
+
+        /// <summary>Converts <paramref name="view"/> (Auto, so cv2's copy) and compares the Mat's bytes with NumSharp's
+        ///     own C-ordered copy.</summary>
+        /// <param name="view">A reversed view.</param>
+        /// <param name="engages">Whether the OpenCV route must have made the copy.</param>
+        /// <param name="what">The case, for messages.</param>
+        private static void CheckReversedCopy(NDArray view, bool engages, string what)
+        {
+            long engaged = ReversedLayoutCopy.Engaged;
+            using var mat = new Mat(view);
+            Assert.AreEqual(engaged + (engages ? 1 : 0), ReversedLayoutCopy.Engaged, $"{what}: the OpenCV route {(engages ? "engaged" : "stayed out")}");
+            using var pixels = mat.data;
+            using var expected = view.copy('C');
+            CollectionAssert.AreEqual(expected.shape, pixels.shape, $"{what}: shape");
+            CollectionAssert.AreEqual(expected.tobytes(), pixels.tobytes(), $"{what}: the same bytes as NumSharp's copy");
+        }
+
+        /// <summary>An array of <paramref name="dtype"/> holding pseudo-random BIT PATTERNS (fixed seed), so a byte
+        ///     comparison sees any value an operation would canonicalise.</summary>
+        /// <param name="dtype">The element type.</param>
+        /// <param name="shape">The shape.</param>
+        /// <returns>A new C-contiguous array.</returns>
+        private static NDArray RandomBits(DType dtype, Shape shape)
+        {
+            var bytes = new byte[shape.size * dtype.itemsize];
+            new Random(20261109).NextBytes(bytes);
+            using var flat = np.frombuffer(bytes, dtype);
+            using var shaped = flat.reshape(shape);
+            return shaped.copy('C');
+        }
+
         /// <summary>Runs <c>cv2.flip(x, 1)</c> on both sides and requires the same result or the same refusal.</summary>
         /// <param name="x">The array (handed to cv2 as a numpy view with the same layout).</param>
         /// <param name="what">The case, for messages.</param>
@@ -256,6 +318,14 @@ namespace UnitTest
             yield return ("HWC ROI", base3["1:3, 1:4"]);
             yield return ("4-D", np.zeros(new Shape(2, 3, 4, 5), dtype));
             yield return ("600 channels (n-D)", np.zeros(new Shape(2, 2, 600), dtype));
+
+            // Large enough for the OpenCV permutation route (ReversedLayoutCopy.MinBytes), compared with cv2 end to end.
+            var big3 = np.arange(48 * 64 * 3).reshape(48, 64, 3).astype(dtype);
+            var big2 = np.arange(96 * 64).reshape(96, 64).astype(dtype);
+            yield return ("HWC channel-reversed, OpenCV route", big3["..., ::-1"]);
+            yield return ("HWC rows and columns reversed, OpenCV route", big3["::-1, ::-1"]);
+            yield return ("reversed rows, OpenCV route", big2["::-1"]);
+            yield return ("reversed columns, OpenCV route", big2[":, ::-1"]);
         }
 
         /// <summary>The layouts of <see cref="output_layout_rules_match_cv2"/>, as factories so each side draws on a
