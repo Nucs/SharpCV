@@ -149,4 +149,6 @@ dotnet test test/UnitTest
 
 Without Python the comparisons report Inconclusive; with `CI=true` (or `SHARPCV_REQUIRE_PYTHON=1`) they fail instead.
 
+The suite runs on Windows x64 and Linux x64 (`.github/workflows/test.yml`, net8.0 and net10.0; on Linux use `opencv-python-headless==4.13.0.92` and the `OpenCvSharp4.official.runtime.linux-x64` package). Every comparison is bit for bit except decoded video frames on Linux: there OpenCvSharp's runtime and opencv-python each link their own FFmpeg, whose YUV-to-BGR conversion rounds differently (mean 1.4 levels apart), so that one test compares within a tolerance. There is no OpenCvSharp 4.13 runtime package for macOS.
+
 If you want to learn more about the API implementation, please refer to the official [documentation](https://docs.opencv.org/).

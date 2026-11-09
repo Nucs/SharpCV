@@ -58,6 +58,22 @@ namespace UnitTest
             }
 
             Assert.AreEqual(38, frames);
+
+            // SharpCV against itself, on every OS: the frame decoded into the caller's array is the frame read() decodes
+            // into a Mat of its own.
+            using (var again = cv2.VideoCapture(mp4Road))
+            {
+                Mat mat = null;
+                for (int i = 0; i <= 5; i++)
+                {
+                    mat?.Dispose();
+                    mat = again.read().Item2;
+                }
+
+                Assert.IsTrue(np.array_equal(mat.data, frame5), "frame 5: the NDArray buffer holds what read() decodes");
+                mat.Dispose();
+            }
+
             Oracle.Run(() =>
             {
                 dynamic cap = Oracle.cv2.VideoCapture(mp4Road);
@@ -65,7 +81,22 @@ namespace UnitTest
                 for (int i = 0; i <= 5; i++)
                     expected = cap.read()[1];
                 cap.release();
-                Oracle.AssertSame(expected, frame5, "frame 5");
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    // Both packages ship OpenCV's own opencv_videoio_ffmpeg4130_64.dll: the same decoder, the same bytes.
+                    Oracle.AssertSame(expected, frame5, "frame 5");
+                    return;
+                }
+
+                // Elsewhere each package links its own FFmpeg (OpenCvSharp's .so statically, opencv-python avcodec
+                // 62.11 / swscale 9.1): H.264 decodes bit-exactly by the standard, but swscale's YUV -> BGR conversion
+                // differs between versions, so the frames are the same picture a few levels apart. Measured on Linux
+                // x64 (2026-11-09): mean |diff| 1.42, max 18. A real defect (swapped channels, a wrong frame, a shifted
+                // row) puts the mean in the tens.
+                using var diff = np.abs(expected.astype(np.int16) - frame5.astype(np.int16));
+                int max = (int)np.amax(diff);
+                double mean = (double)np.mean(diff);
+                Assert.IsTrue(mean <= 3.0 && max <= 64, $"frame 5 against cv2's (another FFmpeg build): max |diff| {max}, mean {mean:F4}");
             });
         }
 

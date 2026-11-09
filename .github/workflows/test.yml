@@ -1,0 +1,44 @@
+# Builds SharpCV and runs its parity suite against a live opencv-python 4.13 on Windows and Linux, for net8.0 and
+# net10.0. GitHub sets CI=true, so a comparison that cannot reach Python fails instead of reporting Inconclusive.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows: OpenCvSharp4.runtime.win and opencv-python ship the same OpenCV FFmpeg plugin, so even video
+          # frames compare bit for bit.
+          - os: windows-latest
+            opencv: opencv-python==4.13.0.92
+          # Linux: OpenCvSharp4.official.runtime.linux-x64; the headless wheel needs no GUI libraries.
+          - os: ubuntu-24.04
+            opencv: opencv-python-headless==4.13.0.92
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # The tests embed this interpreter through pythonnet (PythonSession finds `python` on PATH and its shared
+      # library through sysconfig).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the oracle (numpy 2.4.2, opencv-python 4.13)
+        run: python -m pip install numpy==2.4.2 ${{ matrix.opencv }}
+
+      - name: Test (net8.0 and net10.0)
+        run: dotnet test test/UnitTest/UnitTest.csproj --configuration Release
+        env:
+          SHARPCV_REQUIRE_PYTHON: '1'
