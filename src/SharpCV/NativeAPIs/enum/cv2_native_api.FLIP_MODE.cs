@@ -10,7 +10,7 @@ namespace SharpCV
     ///     axis), -1 both.
     /// </summary>
     /// <remarks>
-    ///     Until SharpCV 0.20 these were carotene's internal flags (3rdparty\carotene\include\carotene\types.hpp:
+    ///     Until SharpCV 0.15 these were carotene's internal flags (3rdparty\carotene\include\carotene\types.hpp:
     ///     horizontal 1, vertical 2, both 3), but SharpCV passes the value straight to <c>cv::flip</c> as its flipCode, where
     ///     every positive value means horizontal: the vertical and both modes flipped horizontally.
     /// </remarks>

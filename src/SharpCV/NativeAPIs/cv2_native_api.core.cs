@@ -169,7 +169,7 @@ namespace SharpCV
         internal static extern ExceptionStatus core_Mat_size(IntPtr mat, out Size output);
 
         /// <summary><c>mat.elemSize()</c>: bytes per pixel (all channels). The export writes a <c>size_t</c>; SharpCV
-        ///     declared it as int until 0.20, which overwrote four bytes past the caller's variable.</summary>
+        ///     declared it as int until 0.15, which overwrote four bytes past the caller's variable.</summary>
         /// <param name="mat">The Mat.</param>
         /// <param name="output">Receives the size in bytes.</param>
         /// <returns>The call status.</returns>
@@ -222,7 +222,7 @@ namespace SharpCV
         internal static extern ExceptionStatus core_InputArray_new_byMat(IntPtr mat, out IntPtr output);
 
         /// <summary><c>delete ia</c>: frees an argument wrapper (it never owned the Mat). Each Mat leaked one per wrapper
-        ///     kind before SharpCV 0.20.</summary>
+        ///     kind before SharpCV 0.15.</summary>
         /// <param name="ia">The wrapper.</param>
         /// <returns>The call status.</returns>
         [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]

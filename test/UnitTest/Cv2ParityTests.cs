@@ -50,7 +50,7 @@ namespace UnitTest
         }
 
         /// <summary>Every morphology operation with cv2's defaults (anchor at the centre, the neutral border value), two
-        ///     iterations. Until SharpCV 0.20 the default border value was 0, so erosions ate in from the image edge.</summary>
+        ///     iterations. Until SharpCV 0.15 the default border value was 0, so erosions ate in from the image edge.</summary>
         [TestMethod]
         public void morphologyEx_every_operation_default_border()
         {
@@ -66,7 +66,7 @@ namespace UnitTest
         }
 
         /// <summary>Structuring elements with cv2's default anchor; MORPH_CROSS is the one the anchor shapes (SharpCV
-        ///     anchored it at (0, 0) until 0.20, which drew an L).</summary>
+        ///     anchored it at (0, 0) until 0.15, which drew an L).</summary>
         [TestMethod]
         public void getStructuringElement_default_anchor()
         {
@@ -162,18 +162,18 @@ namespace UnitTest
         {
             var img = cv2.imread(imgSolar);
             NDArray before = img.data.copy();
-            cv2.putText(img, "SharpCV 0.20", (20, 60), HersheyFonts.HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 2, LineTypes.LINE_AA);
+            cv2.putText(img, "SharpCV 0.15", (20, 60), HersheyFonts.HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 2, LineTypes.LINE_AA);
             var onArray = before.copy();
             cv2.putText(onArray, "NumSharp", (30, 200), HersheyFonts.HERSHEY_DUPLEX, 2.0, (255, 0, 255), 3);
-            var size = cv2.getTextSize("SharpCV 0.20", HersheyFonts.HERSHEY_SIMPLEX, 1.5, 2, out int baseLine);
+            var size = cv2.getTextSize("SharpCV 0.15", HersheyFonts.HERSHEY_SIMPLEX, 1.5, 2, out int baseLine);
 
             Oracle.Run(() =>
             {
-                Oracle.AssertSame(Oracle.cv2.putText(before.copy(), "SharpCV 0.20", (20, 60), (int)HersheyFonts.HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 2, (int)LineTypes.LINE_AA),
+                Oracle.AssertSame(Oracle.cv2.putText(before.copy(), "SharpCV 0.15", (20, 60), (int)HersheyFonts.HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 2, (int)LineTypes.LINE_AA),
                     img.data, "putText on a Mat");
                 Oracle.AssertSame(Oracle.cv2.putText(before.copy(), "NumSharp", (30, 200), (int)HersheyFonts.HERSHEY_DUPLEX, 2.0, (255, 0, 255), 3),
                     onArray, "putText on an NDArray");
-                dynamic measured = Oracle.cv2.getTextSize("SharpCV 0.20", (int)HersheyFonts.HERSHEY_SIMPLEX, 1.5, 2);
+                dynamic measured = Oracle.cv2.getTextSize("SharpCV 0.15", (int)HersheyFonts.HERSHEY_SIMPLEX, 1.5, 2);
                 Assert.AreEqual(((int)measured[0][0], (int)measured[0][1], (int)measured[1]), (size.Width, size.Height, baseLine), "getTextSize");
             });
         }

@@ -35,7 +35,7 @@ namespace SharpCV
         ///     dimensions instead of becoming a multi-channel image, and a C-contiguous float32 array crosses without a
         ///     copy.
         /// </summary>
-        /// <param name="blob">The input: an NCHW blob Mat from <see cref="Dnn.blobFromImage"/>, or an NDArray such as a
+        /// <param name="blob">The input: an NCHW blob Mat from <see cref="Dnn.blobFromImage(InputArray, double, System.ValueTuple{int, int}, System.Nullable{Scalar}, bool, bool)"/>, or an NDArray such as a
         ///     <c>(1, 3, 224, 224)</c> float32 array.</param>
         /// <param name="name">The input layer; empty for the first.</param>
         /// <exception cref="ArgumentNullException"><paramref name="blob"/> is null.</exception>
@@ -51,6 +51,21 @@ namespace SharpCV
             NativeMethods.Call(() => cv2_native_api.dnn_Net_setInput(handle, source, name));
             GC.KeepAlive(this);
         }
+
+        /// <summary>The pre-0.15 Mat overload, kept for source compatibility; forwards to the InputArray overload. C# 13+
+        ///     prefers that overload for a Mat argument.</summary>
+        /// <inheritdoc cref="setInput(InputArray, string)"/>
+        [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
+        public void setInput(Mat blob, string name = "")
+            => setInput((InputArray)blob, name);
+
+        /// <summary>The pre-0.15 NDArray overload, kept for source compatibility; forwards to the InputArray overload, so
+        ///     the blob stays n-dimensional (cv2's <c>CV_ND</c>) and is released when the call returns, whatever the
+        ///     caller's C# version.</summary>
+        /// <inheritdoc cref="setInput(InputArray, string)"/>
+        [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
+        public void setInput(NDArray blob, string name = "")
+            => setInput((InputArray)blob, name);
 
         /// <summary>
         ///     <c>net.forward(outputName)</c>: runs the network.

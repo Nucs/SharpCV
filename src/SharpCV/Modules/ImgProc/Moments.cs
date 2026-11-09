@@ -40,6 +40,16 @@ namespace SharpCV
             Initialize(m.m00, m.m10, m.m01, m.m20, m.m11, m.m02, m.m30, m.m21, m.m12, m.m03);
         }
 
+        /// <summary>The pre-0.15 Mat constructor, kept for source compatibility; forwards to the InputArray one. C# 13+
+        ///     prefers that constructor for Mat and NDArray arguments; C# 12 binds an NDArray argument here, and its
+        ///     implicit Mat then waits for the finalizer.</summary>
+        /// <inheritdoc cref="Moments(InputArray, bool)"/>
+        [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
+        public Moments(Mat img, bool binaryImage = false)
+            : this((InputArray)img, binaryImage)
+        {
+        }
+
         /// <summary>
         ///     Stores the spatial moments and derives the central and normalized ones exactly as the
         ///     <c>cv::Moments(m00, ..., m03)</c> constructor does.

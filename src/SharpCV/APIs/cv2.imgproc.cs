@@ -31,7 +31,7 @@ namespace SharpCV
         }
 
         /// <summary><c>cv2.contourArea(contour, oriented)</c>.</summary>
-        /// <param name="img">The contour: a point set such as one of <see cref="findContours"/>'s results.</param>
+        /// <param name="img">The contour: a point set such as one of <see cref="findContours(InputArray, RetrievalModes, ContourApproximationModes, Point)"/>'s results.</param>
         /// <param name="oriented">True returns a signed area (its sign gives the orientation).</param>
         /// <returns>The area.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="img"/> is null.</exception>
@@ -208,7 +208,7 @@ namespace SharpCV
         /// </summary>
         /// <param name="img">The image.</param>
         /// <param name="center">The rotation centre as (x, y) = (column, row); integer and float tuples both convert.
-        ///     Until SharpCV 0.20 the centre reached OpenCV as garbage floats near 5e-43, so every rotation turned about
+        ///     Until SharpCV 0.15 the centre reached OpenCV as garbage floats near 5e-43, so every rotation turned about
         ///     the top-left corner.</param>
         /// <param name="angle">The angle in degrees, counter-clockwise.</param>
         /// <param name="scale">The isotropic scale.</param>
@@ -345,7 +345,7 @@ namespace SharpCV
                 throw new ArgumentNullException(nameof(text));
 
             using var dst = img.Open("img");
-            // putText writes the image: it takes the InputOutputArray (SharpCV passed the read-only InputArray until 0.20).
+            // putText writes the image: it takes the InputOutputArray (SharpCV passed the read-only InputArray until 0.15).
             NativeMethods.Call(() => cv2_native_api.imgproc_putText(dst.Mat.OutputArray, text, org, (int)fontFace, fontScale, color,
                 thickness, (int)lineType, bottomLeftOrigin ? 1 : 0));
         }
@@ -389,7 +389,7 @@ namespace SharpCV
         /// <param name="shape">Rectangle, cross or ellipse.</param>
         /// <param name="ksize">The kernel size (width, height).</param>
         /// <param name="anchor">The anchor; null is (-1, -1), the centre, as in cv2. It shapes MORPH_CROSS only: SharpCV
-        ///     passed (0, 0) until 0.20, which drew the cross through the top-left corner.</param>
+        ///     passed (0, 0) until 0.15, which drew the cross through the top-left corner.</param>
         /// <returns>A new 8-bit kernel.</returns>
         /// <exception cref="OpenCVException">The anchor lies outside the kernel.</exception>
         public Mat getStructuringElement(MorphShapes shape, Size ksize, Point? anchor = null)
@@ -408,7 +408,7 @@ namespace SharpCV
         /// <param name="borderType">The border mode.</param>
         /// <param name="borderValue">The constant border's value; null is <c>cv2.morphologyDefaultBorderValue()</c> (all
         ///     components DBL_MAX), which makes the border neutral: an erosion does not eat in from the image edge. SharpCV
-        ///     passed 0 until 0.20 (7,024 pixels of a 1040 x 720 two-pass erosion differed from cv2).</param>
+        ///     passed 0 until 0.15 (7,024 pixels of a 1040 x 720 two-pass erosion differed from cv2).</param>
         /// <returns>A new image.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="src"/> or <paramref name="kernel"/> is null.</exception>
         /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
@@ -552,9 +552,9 @@ namespace SharpCV
         /// <param name="color">The colour.</param>
         /// <param name="thickness">The line thickness; negative fills.</param>
         /// <param name="lineType">The line type.</param>
-        /// <param name="hierarchy">The hierarchy from <see cref="findContours"/>, or null.</param>
+        /// <param name="hierarchy">The hierarchy from <see cref="findContours(InputArray, RetrievalModes, ContourApproximationModes, Point)"/>, or null.</param>
         /// <param name="maxLevel">The deepest nesting level drawn.</param>
-        /// <param name="offset">Added to every point; null is (0, 0), cv2's default (it was (-1, -1) until SharpCV 0.20,
+        /// <param name="offset">Added to every point; null is (0, 0), cv2's default (it was (-1, -1) until SharpCV 0.15,
         ///     which drew every contour one pixel up and left).</param>
         /// <exception cref="ArgumentNullException"><paramref name="image"/> or <paramref name="contour"/> is
         ///     null.</exception>
@@ -577,14 +577,14 @@ namespace SharpCV
         }
 
         /// <summary><c>cv2.drawContours(image, contours, contourIdx, color, thickness, lineType, hierarchy, maxLevel,
-        ///     offset)</c> for the contour Mats <see cref="findContours"/> returns: draws INTO the image.</summary>
+        ///     offset)</c> for the contour Mats <see cref="findContours(InputArray, RetrievalModes, ContourApproximationModes, Point)"/> returns: draws INTO the image.</summary>
         /// <param name="image">The image, modified in place: a Mat, or a writeable NDArray viewable as a Mat.</param>
         /// <param name="contours">The contours.</param>
         /// <param name="contourIdx">The contour to draw; negative draws all.</param>
         /// <param name="color">The colour.</param>
         /// <param name="thickness">The line thickness; negative fills.</param>
         /// <param name="lineType">The line type.</param>
-        /// <param name="hierarchy">The hierarchy from <see cref="findContours"/>, or null.</param>
+        /// <param name="hierarchy">The hierarchy from <see cref="findContours(InputArray, RetrievalModes, ContourApproximationModes, Point)"/>, or null.</param>
         /// <param name="maxLevel">The deepest nesting level drawn.</param>
         /// <param name="offset">Added to every point; null is (0, 0).</param>
         /// <exception cref="ArgumentNullException"><paramref name="image"/>, <paramref name="contours"/> or one of its
@@ -609,7 +609,7 @@ namespace SharpCV
             var contoursPtr = new IntPtr[contours.Length];
             for (int i = 0; i < contours.Length; i++)
             {
-                // OpenCvSharpExtern dereferences every cv::Mat*: a null or disposed contour (IntPtr.Zero until SharpCV 0.20)
+                // OpenCvSharpExtern dereferences every cv::Mat*: a null or disposed contour (IntPtr.Zero until SharpCV 0.15)
                 // is an access violation .NET cannot catch, so both are refused here.
                 if (contours[i] is null)
                     throw new ArgumentNullException(nameof(contours), $"contours[{i}] is null.");
@@ -617,7 +617,7 @@ namespace SharpCV
             }
 
             using var dst = image.Open("image");
-            // The hierarchy parameter is an _InputArray; SharpCV passed the cv::Mat itself until 0.20.
+            // The hierarchy parameter is an _InputArray; SharpCV passed the cv::Mat itself until 0.15.
             NativeMethods.Call(() => cv2_native_api.imgproc_drawContours_InputArray(
                         dst.Mat.OutputArray, contoursPtr, contoursPtr.Length,
                         contourIdx, color, thickness, lineType,

@@ -53,7 +53,7 @@ namespace SharpCV
         [DllImport(OpenCvDllName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ExceptionStatus videoio_VideoCapture_release(IntPtr vid);
 
-        /// <summary><c>delete obj</c>. Before SharpCV 0.20 the capture was freed with <c>Marshal.FreeHGlobal</c>
+        /// <summary><c>delete obj</c>. Before SharpCV 0.15 the capture was freed with <c>Marshal.FreeHGlobal</c>
         ///     instead, which corrupts the C++ heap.</summary>
         /// <param name="vid">The capture; never use it again.</param>
         /// <returns>The call status.</returns>

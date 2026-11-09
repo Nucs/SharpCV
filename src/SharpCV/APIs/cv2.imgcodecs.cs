@@ -193,7 +193,7 @@ namespace SharpCV
 
 			using var bufVec = new VectorOfByte();
             int ret = 0;
-            // The image is the encoder's INPUT; SharpCV passed its OutputArray here until 0.20.
+            // The image is the encoder's INPUT; SharpCV passed its OutputArray here until 0.15.
             NativeMethods.Call(() => cv2_native_api.imgcodecs_imencode_vector(ext, src.Mat.InputArray, bufVec.Handle, prms, prms.Length, out ret));
 
 			buf = bufVec.ToArray();

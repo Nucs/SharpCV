@@ -48,7 +48,7 @@ namespace SharpCV
         internal static extern ExceptionStatus imgproc_resize(IntPtr src, IntPtr dst, Size dsize, double fx, double fy, int interpolation);
 
         /// <summary><c>new cv::Mat(cv::getRotationMatrix2D(center, angle, scale))</c>: a 2 x 3 float64 affine matrix.
-        ///     The export takes a FLOAT point; SharpCV passed an int <see cref="Point"/> until 0.20, so the centre's int
+        ///     The export takes a FLOAT point; SharpCV passed an int <see cref="Point"/> until 0.15, so the centre's int
         ///     bits were read as floats near 5e-43 and every rotation turned about the origin.</summary>
         /// <param name="center">The rotation centre.</param>
         /// <param name="angle">The angle in degrees, counter-clockwise.</param>
@@ -235,7 +235,7 @@ namespace SharpCV
         /// <param name="thickness">The line thickness; negative fills.</param>
         /// <param name="lineType">The <see cref="LineTypes"/> type.</param>
         /// <param name="hierarchy">The hierarchy as an <c>_InputArray</c>, or null for none. SharpCV passed the Mat
-        ///     itself here until 0.20, which OpenCV then read as an <c>_InputArray</c>.</param>
+        ///     itself here until 0.15, which OpenCV then read as an <c>_InputArray</c>.</param>
         /// <param name="maxLevel">The deepest nested contour level drawn.</param>
         /// <param name="offset">Added to every point.</param>
         /// <returns>The call status.</returns>

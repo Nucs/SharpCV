@@ -49,7 +49,7 @@ namespace UnitTest
             Assert.IsTrue(result);
         }
 
-        /// <summary>Both crop forms give the region cv2's slice <c>img[50:400, 150:350]</c> gives. Until SharpCV 0.20 the
+        /// <summary>Both crop forms give the region cv2's slice <c>img[50:400, 150:350]</c> gives. Until SharpCV 0.15 the
         ///     region's NDArray ignored the parent's row step, so every row after the first was read from the wrong
         ///     place (row 1, column 0 read 201; cv2 says 86).</summary>
         [TestMethod]

@@ -174,7 +174,7 @@ namespace UnitTest
         /// <summary>
         ///     An NDArray argument's conversion lives exactly as long as the call: the 6 MB copy a channel-reversed 1080p
         ///     view needs is released when cv2.cvtColor returns, with no collection. Through the implicit Mat conversion
-        ///     used before SharpCV 0.20's proxies, each copy stayed outstanding until the finalizer ran.
+        ///     used before SharpCV 0.15's proxies, each copy stayed outstanding until the finalizer ran.
         /// </summary>
         [TestMethod]
         public void ndarray_argument_temporaries_are_released_on_return()

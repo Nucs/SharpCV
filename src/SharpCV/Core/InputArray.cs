@@ -12,7 +12,7 @@ namespace SharpCV
     ///     <para>
     ///     An NDArray argument becomes a Mat by opencv-python's rules (shared when the layout fits cv::Mat, copied
     ///     otherwise; see <see cref="SharpCV.Mat(NDArray, MatCodecMode)"/>) for the duration of ONE call, and that Mat and
-    ///     any copy are released when the call returns. Until SharpCV 0.20 the functions took a <see cref="SharpCV.Mat"/>
+    ///     any copy are released when the call returns. Until SharpCV 0.15 the functions took a <see cref="SharpCV.Mat"/>
     ///     and the NDArray reached them through the implicit conversion, which left the temporary Mat (and, for a 1080p
     ///     <c>[..., ::-1]</c> view, its 6 MB copy) to the finalizer.
     ///     </para>
@@ -20,7 +20,12 @@ namespace SharpCV
     ///     A <see cref="SharpCV.Mat"/> argument is used as it is and never disposed by the call. The struct only remembers
     ///     what it was given, so holding one in a variable and passing it twice is fine: each call converts again.
     ///     </para>
+    ///     <para>
+    ///     <see cref="NDBorrowedAttribute"/>: the caller owns the Mat or NDArray it handed over, so NumSharp's ownership
+    ///     analyzer must not ask the proxy to dispose it (NDW016).
+    ///     </para>
     /// </remarks>
+    [NDBorrowed]
     public readonly struct InputArray
     {
         /// <summary>The caller's Mat, or null.</summary>
@@ -80,7 +85,9 @@ namespace SharpCV
     ///     incompatible with cv::Mat"), because drawing on a copy would be lost.
     /// </summary>
     /// <remarks>One parameter type serves a Mat target and an NDArray target; an NDArray target is never copied, so a
-    ///     drawing can never silently land in a temporary.</remarks>
+    ///     drawing can never silently land in a temporary. Like <see cref="InputArray"/> it borrows (the drawing target
+    ///     belongs to the caller), hence <see cref="NDBorrowedAttribute"/>.</remarks>
+    [NDBorrowed]
     public readonly struct InputOutputArray
     {
         /// <summary>The caller's Mat, or null.</summary>

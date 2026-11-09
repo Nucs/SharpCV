@@ -8,7 +8,7 @@ namespace UnitTest
 {
     /// <summary>
     ///     OpenCV errors surface as <see cref="OpenCVException"/> with cv2's code and message (they returned an empty Mat
-    ///     silently before SharpCV 0.20), and the library keeps working after one.
+    ///     silently before SharpCV 0.15), and the library keeps working after one.
     /// </summary>
     [TestClass]
     public class ErrorTests : Test
@@ -74,7 +74,7 @@ namespace UnitTest
         /// <summary>
         ///     A conversion refusal names the argument as cv2 names it ("src data type = bool is not supported", then
         ///     "kernel", "M", "array", "m"): each function opens its NDArray arguments under cv2's parameter names, where
-        ///     the implicit Mat conversion used before SharpCV 0.20's proxies called every argument "array".
+        ///     the implicit Mat conversion used before SharpCV 0.15's proxies called every argument "array".
         /// </summary>
         [TestMethod]
         public void refusals_name_the_cv2_argument()

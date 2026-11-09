@@ -44,7 +44,7 @@ namespace SharpCV
 
         /// <summary><c>cv2.waitKey(delay)</c>: processes window events for <paramref name="delay"/> ms.</summary>
         /// <param name="delay">Milliseconds to wait; 0 waits for a key.</param>
-        /// <returns>The pressed key's code, or -1 when none was pressed (it returned nothing before SharpCV 0.20).</returns>
+        /// <returns>The pressed key's code, or -1 when none was pressed (it returned nothing before SharpCV 0.15).</returns>
         /// <exception cref="OpenCVException">OpenCV has no GUI backend.</exception>
         public int waitKey(int delay = 0)
         {

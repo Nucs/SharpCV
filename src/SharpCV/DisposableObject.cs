@@ -12,7 +12,7 @@ namespace SharpCV
     ///     because a finalizer must not touch other finalizable objects.
     /// </summary>
     /// <remarks>
-    ///     Until SharpCV 0.20 the default <see cref="FreeHandle"/> freed the handle with <c>Marshal.FreeHGlobal</c>, which
+    ///     Until SharpCV 0.15 the default <see cref="FreeHandle"/> freed the handle with <c>Marshal.FreeHGlobal</c>, which
     ///     is wrong for every C++ object (it corrupted the heap for <see cref="VideoCapture"/>, which relied on it);
     ///     the method is abstract now, so every subclass states how its handle dies.
     /// </remarks>

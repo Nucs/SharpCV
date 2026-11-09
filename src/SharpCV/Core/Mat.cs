@@ -558,7 +558,7 @@ namespace SharpCV
         /// <param name="type">A CLR element type (<c>typeof(float)</c>).</param>
         /// <returns>The Mat type; int64 and uint64 give <see cref="MatType.CV_32SC1"/>, the cast cv2 applies.</returns>
         /// <exception cref="NotSupportedException">A type OpenCV has no depth for (bool, uint32, decimal, ...); this
-        ///     returned <see cref="MatType.CV_8UC1"/> silently before SharpCV 0.20.</exception>
+        ///     returned <see cref="MatType.CV_8UC1"/> silently before SharpCV 0.15.</exception>
         public MatType FromType(Type type)
             => FromType(np.dtype(type).GetTypeCode());
 

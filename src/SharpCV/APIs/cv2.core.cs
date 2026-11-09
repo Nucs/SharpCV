@@ -22,6 +22,18 @@ namespace SharpCV
     ///     Every function raises <see cref="OpenCVException"/> (cv2's <c>cv2.error</c>, same message) when OpenCV rejects
     ///     the call; none returns an empty result for bad input any more.
     ///     </para>
+    ///     <para>
+    ///     <b>The pre-0.15 overloads</b> (<c>cvtColor(Mat ...)</c>, <c>rectangle(NDArray ...)</c>, and so on, in
+    ///     cv2.compat.cs) are kept so code written against them still compiles: an <c>IntPtr</c> argument (which converts
+    ///     to an OWNING <see cref="Mat"/>), a <c>Mat</c>-typed method group, a C# 12 caller. Each forwards to its proxy
+    ///     twin and carries <c>[OverloadResolutionPriority(-1)]</c>, so a C# 13+ compiler (the default from net9.0 on, or
+    ///     <c>LangVersion</c> 13+) binds Mat and NDArray arguments to the proxy overloads. A C# 12 compiler (the default
+    ///     for net8.0 projects) ignores the attribute and binds an NDArray argument to the <c>Mat</c> overload, the better
+    ///     conversion target: its <c>implicit operator Mat(NDArray)</c> temporary then waits for the finalizer, kept
+    ///     bounded by SharpCV's native-memory tracker. A net8.0 project gets the proxies with
+    ///     <c>&lt;LangVersion&gt;latest&lt;/LangVersion&gt;</c>. The drawing functions keep their NDArray overloads, so a
+    ///     C# 12 caller draws into an NDArray in place either way.
+    ///     </para>
     /// </remarks>
     public partial class cv_api
     {
@@ -83,16 +95,6 @@ namespace SharpCV
         public Mat hconcat(params InputArray[] imgs)
             => Concatenate(imgs, horizontal: true);
 
-        /// <summary><c>cv2.hconcat(src)</c> for an array of Mats (a <c>Mat[]</c> variable does not convert to the
-        ///     <see cref="InputArray"/> array of the <c>params</c> overload).</summary>
-        /// <param name="imgs">The images.</param>
-        /// <returns>A new image.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="imgs"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">One of the images was disposed.</exception>
-        /// <exception cref="OpenCVException">The heights or types differ.</exception>
-        public Mat hconcat(Mat[] imgs)
-            => Concatenate(imgs, horizontal: true);
-
         /// <summary><c>cv2.vconcat(src)</c>: the images stacked vertically (same width and type).</summary>
         /// <param name="imgs">The images, Mats and NDArrays mixed as needed.</param>
         /// <returns>A new image.</returns>
@@ -100,15 +102,6 @@ namespace SharpCV
         /// <exception cref="ObjectDisposedException">A Mat argument was disposed.</exception>
         /// <exception cref="OpenCVException">The widths or types differ, or cv2 refuses an NDArray.</exception>
         public Mat vconcat(params InputArray[] imgs)
-            => Concatenate(imgs, horizontal: false);
-
-        /// <summary><c>cv2.vconcat(src)</c> for an array of Mats.</summary>
-        /// <param name="imgs">The images.</param>
-        /// <returns>A new image.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="imgs"/> is null.</exception>
-        /// <exception cref="ObjectDisposedException">One of the images was disposed.</exception>
-        /// <exception cref="OpenCVException">The widths or types differ.</exception>
-        public Mat vconcat(Mat[] imgs)
             => Concatenate(imgs, horizontal: false);
 
         /// <summary>
@@ -161,7 +154,7 @@ namespace SharpCV
             for (int i = 0; i < imgs.Length; i++)
             {
                 // OpenCvSharpExtern dereferences every cv::Mat* it is given: a null or disposed element (IntPtr.Zero until
-                // SharpCV 0.20) is an access violation, which .NET cannot catch, so both are refused here instead.
+                // SharpCV 0.15) is an access violation, which .NET cannot catch, so both are refused here instead.
                 if (imgs[i] is null)
                     throw new ArgumentNullException(nameof(imgs), $"imgs[{i}] is null.");
                 handles[i] = imgs[i].Handle;

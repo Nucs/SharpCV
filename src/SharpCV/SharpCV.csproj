@@ -7,7 +7,7 @@
     <AssemblyName>SharpCV</AssemblyName>
     <RootNamespace>SharpCV</RootNamespace>
     <PackageId>SharpCV</PackageId>
-    <Version>0.20.0</Version>
+    <Version>0.15.0</Version>
     <Authors>Haiping Chen</Authors>
     <Company>SciSharp STACK</Company>
     <Product>SharpCV</Product>
@@ -24,7 +24,7 @@
     <!-- The code base predates nullable reference types; annotations keep its existing `?` markers legal without
          turning on flow analysis for every file. -->
     <Nullable>annotations</Nullable>
-    <!-- The XML documentation ships in the package for the documented API; the pre-0.20 enums (BorderTypes,
+    <!-- The XML documentation ships in the package for the documented API; the pre-0.15 enums (BorderTypes,
          ColorConversionCodes, ...) carry no comments yet, so their CS1591 noise is silenced instead of drowning real
          warnings. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>

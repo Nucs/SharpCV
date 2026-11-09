@@ -92,7 +92,7 @@ namespace UnitTest
 
         /// <summary>
         ///     A null or disposed Mat among the images is refused before OpenCvSharpExtern dereferences it: until SharpCV
-        ///     0.20 it crossed as a null <c>cv::Mat*</c>, an access violation that ends the process.
+        ///     0.15 it crossed as a null <c>cv::Mat*</c>, an access violation that ends the process.
         /// </summary>
         [TestMethod]
         public void concat_refuses_null_and_disposed_mats()
@@ -135,7 +135,7 @@ namespace UnitTest
         }
 
         /// <summary>Every FLIP_MODE matches cv2's flip code: horizontal 1, vertical 0, both -1 (SharpCV sent 2 and 3,
-        ///     both horizontal, until 0.20).</summary>
+        ///     both horizontal, until 0.15).</summary>
         [TestMethod]
         public void flip()
         {

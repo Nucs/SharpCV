@@ -11,7 +11,7 @@ namespace SharpCV
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///     Before SharpCV 0.20 a failing call returned an empty <see cref="Mat"/> silently (the native status was
+    ///     Before SharpCV 0.15 a failing call returned an empty <see cref="Mat"/> silently (the native status was
     ///     ignored); every wrapper now raises this exception instead, so code that relied on getting an empty result for
     ///     bad input must catch it.
     ///     </para>

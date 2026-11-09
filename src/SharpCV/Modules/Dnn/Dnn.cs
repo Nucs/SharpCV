@@ -50,7 +50,7 @@ namespace SharpCV
         /// <param name="size">spatial size for output image; default (0, 0) keeps the image's</param>
         /// <param name="mean">scalar with mean values which are subtracted from channels.</param>
         /// <param name="swapRB">flag which indicates that swap first and last channels in 3-channel image is necessary;
-        ///     false as in cv2 (it defaulted to true until SharpCV 0.20).</param>
+        ///     false as in cv2 (it defaulted to true until SharpCV 0.15).</param>
         /// <param name="crop">flag which indicates whether image will be cropped after resize or not</param>
         /// <returns>A new NCHW float32 Mat; its <see cref="Mat.data"/> is a <c>(1, C, H, W)</c> NDArray view.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="image"/> is null.</exception>
@@ -71,5 +71,13 @@ namespace SharpCV
                 out handle));
             return new Mat(handle).Tracked();
         }
+
+        /// <summary>The pre-0.15 Mat overload, kept for source compatibility; forwards to the InputArray overload. C# 13+
+        ///     prefers that overload for Mat and NDArray arguments; C# 12 binds an NDArray argument here, and its implicit
+        ///     Mat then waits for the finalizer.</summary>
+        /// <inheritdoc cref="blobFromImage(InputArray, double, ValueTuple{int, int}, Nullable{Scalar}, bool, bool)"/>
+        [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
+        public Mat blobFromImage(Mat image, double scaleFactor = 1.0, (int, int) size = default, Scalar? mean = null, bool swapRB = false, bool crop = false)
+            => blobFromImage((InputArray)image, scaleFactor, size, mean, swapRB, crop);
     }
 }

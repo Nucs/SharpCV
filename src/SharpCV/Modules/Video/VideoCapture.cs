@@ -120,7 +120,7 @@ namespace SharpCV
             GC.KeepAlive(this);
         }
 
-        /// <summary>Deletes the native capture (closing the source). Until SharpCV 0.20 this was the base class's
+        /// <summary>Deletes the native capture (closing the source). Until SharpCV 0.15 this was the base class's
         ///     <c>Marshal.FreeHGlobal</c>, which corrupts the C++ heap.</summary>
         protected override void FreeHandle()
         {

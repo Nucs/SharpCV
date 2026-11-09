@@ -102,7 +102,7 @@ namespace UnitTest
         }
 
         /// <summary>A 180 degree rotation about the centre: the image's own pixels, upside down (not the near-black image
-        ///     SharpCV produced before 0.20, when the centre reached OpenCV as ~5e-43).</summary>
+        ///     SharpCV produced before 0.15, when the centre reached OpenCV as ~5e-43).</summary>
         [TestMethod]
         public void rotate()
         {
