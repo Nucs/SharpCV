@@ -11,8 +11,10 @@ namespace SharpCV
     public partial class cv_api
     {
         /// <summary><c>cv2.cvtColor(src, code, dstCn)</c>: converts between colour spaces (BGR to GRAY, ...).</summary>
-        /// <param name="img">The image (a Mat or an NDArray; a <c>[..., ::-1]</c> channel-reversed view is copied
-        ///     first, as cv2 does, and the copy is freed when the call returns).</param>
+        /// <param name="img">The image (a Mat or an NDArray). A channel-reversed uint8 / uint16 NDArray view of a
+        ///     3-channel image (<c>img[..., ::-1]</c>, the BGR / RGB idiom) is read WITHOUT a copy whenever the code has a
+        ///     BGR / RGB twin; any other layout cv::Mat cannot view (float32 reversed views included) is copied first, as
+        ///     cv2 does, and the copy is freed when the call returns.</param>
         /// <param name="code">The conversion.</param>
         /// <param name="dstCnt">The destination channel count; 0 derives it from the code.</param>
         /// <returns>A new image.</returns>
@@ -24,10 +26,101 @@ namespace SharpCV
             ColorConversionCodes code,
             int dstCnt = 0)
         {
+            // img[..., ::-1] of a 3-channel image is the memory under it with the channel order reversed, so converting
+            // it with a BGR-input code is converting that memory with the code's RGB-input twin: OpenCV implements each
+            // pair as ONE kernel parameterized by the blue channel's index, bit-identical for the integer depths
+            // TryChannelReversedSource admits, and the copy cv2 makes first is skipped. `is not null`: NDArray's != is
+            // element-wise.
+            if (img.Array is not null && ChannelSwapTwin(code, dstCnt, out int twin, out int twinDstCnt))
+            {
+                using var unreversed = ReversedLayoutCopy.TryChannelReversedSource(img.Array);
+                if (unreversed is not null)
+                {
+                    try
+                    {
+                        var converted = new Mat();
+                        NativeMethods.Call(() => cv2_native_api.imgproc_cvtColor(unreversed.InputArray, converted.OutputArray, twin, twinDstCnt));
+                        return converted.Tracked();
+                    }
+                    finally
+                    {
+                        // The header reads the caller's memory: the array stays reachable until OpenCV is done.
+                        GC.KeepAlive(img.Array);
+                    }
+                }
+            }
+
             using var src = img.Open("src");
             var dst = new Mat();
             NativeMethods.Call(() => cv2_native_api.imgproc_cvtColor(src.Mat.InputArray, dst.OutputArray, (int)code, dstCnt));
             return dst.Tracked();
+        }
+
+        /// <summary>
+        ///     The code that converts the memory under a channel-reversed 3-channel view to what <paramref name="code"/>
+        ///     makes of the view itself: the code with its input's BGR and RGB swapped (COLOR_BGR2GRAY and COLOR_RGB2GRAY,
+        ///     COLOR_BGR2HSV and COLOR_RGB2HSV, ...), which OpenCV runs through the same kernel with the other blue index.
+        ///     Only codes whose INPUT is 3-channel BGR or RGB have one; a 4-channel view reversed is A,R,G,B, no format of
+        ///     OpenCV's.
+        /// </summary>
+        /// <param name="code">The requested conversion.</param>
+        /// <param name="dstCnt">The requested destination channel count.</param>
+        /// <param name="twin">The twin code.</param>
+        /// <param name="twinDstCnt">The destination channel count for the twin: <paramref name="dstCnt"/>, except for
+        ///     COLOR_BGR2RGB (= COLOR_RGB2BGR), whose twin is the NO-swap code COLOR_BGR2BGRA. OpenCV runs all of
+        ///     BGR2RGB / BGR2BGRA / BGR2RGBA through one kernel taking a swap flag and a channel count, but defaults
+        ///     BGR2BGRA's count to 4 where BGR2RGB's is 3, so the default 0 becomes an explicit 3 (4 stays 4, and an
+        ///     invalid count fails the same check).</param>
+        /// <returns>False when the code has no twin.</returns>
+        private static bool ChannelSwapTwin(ColorConversionCodes code, int dstCnt, out int twin, out int twinDstCnt)
+        {
+            twinDstCnt = code == ColorConversionCodes.COLOR_BGR2RGB && dstCnt == 0 ? 3 : dstCnt;
+            twin = code switch
+            {
+                ColorConversionCodes.COLOR_BGR2BGRA => (int)ColorConversionCodes.COLOR_BGR2RGBA,
+                ColorConversionCodes.COLOR_BGR2RGBA => (int)ColorConversionCodes.COLOR_BGR2BGRA,
+                ColorConversionCodes.COLOR_BGR2RGB => (int)ColorConversionCodes.COLOR_BGR2BGRA,
+                ColorConversionCodes.COLOR_BGR2GRAY => (int)ColorConversionCodes.COLOR_RGB2GRAY,
+                ColorConversionCodes.COLOR_RGB2GRAY => (int)ColorConversionCodes.COLOR_BGR2GRAY,
+                ColorConversionCodes.COLOR_BGR2BGR565 => (int)ColorConversionCodes.COLOR_RGB2BGR565,
+                ColorConversionCodes.COLOR_RGB2BGR565 => (int)ColorConversionCodes.COLOR_BGR2BGR565,
+                ColorConversionCodes.COLOR_BGR2BGR555 => (int)ColorConversionCodes.COLOR_RGB2BGR555,
+                ColorConversionCodes.COLOR_RGB2BGR555 => (int)ColorConversionCodes.COLOR_BGR2BGR555,
+                ColorConversionCodes.COLOR_BGR2XYZ => (int)ColorConversionCodes.COLOR_RGB2XYZ,
+                ColorConversionCodes.COLOR_RGB2XYZ => (int)ColorConversionCodes.COLOR_BGR2XYZ,
+                ColorConversionCodes.COLOR_BGR2YCrCb => (int)ColorConversionCodes.COLOR_RGB2YCrCb,
+                ColorConversionCodes.COLOR_RGB2YCrCb => (int)ColorConversionCodes.COLOR_BGR2YCrCb,
+                ColorConversionCodes.COLOR_BGR2HSV => (int)ColorConversionCodes.COLOR_RGB2HSV,
+                ColorConversionCodes.COLOR_RGB2HSV => (int)ColorConversionCodes.COLOR_BGR2HSV,
+                ColorConversionCodes.COLOR_BGR2Lab => (int)ColorConversionCodes.COLOR_RGB2Lab,
+                ColorConversionCodes.COLOR_RGB2Lab => (int)ColorConversionCodes.COLOR_BGR2Lab,
+                ColorConversionCodes.COLOR_BGR2Luv => (int)ColorConversionCodes.COLOR_RGB2Luv,
+                ColorConversionCodes.COLOR_RGB2Luv => (int)ColorConversionCodes.COLOR_BGR2Luv,
+                ColorConversionCodes.COLOR_BGR2HLS => (int)ColorConversionCodes.COLOR_RGB2HLS,
+                ColorConversionCodes.COLOR_RGB2HLS => (int)ColorConversionCodes.COLOR_BGR2HLS,
+                ColorConversionCodes.COLOR_BGR2HSV_FULL => (int)ColorConversionCodes.COLOR_RGB2HSV_FULL,
+                ColorConversionCodes.COLOR_RGB2HSV_FULL => (int)ColorConversionCodes.COLOR_BGR2HSV_FULL,
+                ColorConversionCodes.COLOR_BGR2HLS_FULL => (int)ColorConversionCodes.COLOR_RGB2HLS_FULL,
+                ColorConversionCodes.COLOR_RGB2HLS_FULL => (int)ColorConversionCodes.COLOR_BGR2HLS_FULL,
+                ColorConversionCodes.COLOR_LBGR2Lab => (int)ColorConversionCodes.COLOR_LRGB2Lab,
+                ColorConversionCodes.COLOR_LRGB2Lab => (int)ColorConversionCodes.COLOR_LBGR2Lab,
+                ColorConversionCodes.COLOR_LBGR2Luv => (int)ColorConversionCodes.COLOR_LRGB2Luv,
+                ColorConversionCodes.COLOR_LRGB2Luv => (int)ColorConversionCodes.COLOR_LBGR2Luv,
+                ColorConversionCodes.COLOR_BGR2YUV => (int)ColorConversionCodes.COLOR_RGB2YUV,
+                ColorConversionCodes.COLOR_RGB2YUV => (int)ColorConversionCodes.COLOR_BGR2YUV,
+                ColorConversionCodes.COLOR_BGR2YUV_I420 => (int)ColorConversionCodes.COLOR_RGB2YUV_I420,
+                ColorConversionCodes.COLOR_RGB2YUV_I420 => (int)ColorConversionCodes.COLOR_BGR2YUV_I420,
+                ColorConversionCodes.COLOR_BGR2YUV_YV12 => (int)ColorConversionCodes.COLOR_RGB2YUV_YV12,
+                ColorConversionCodes.COLOR_RGB2YUV_YV12 => (int)ColorConversionCodes.COLOR_BGR2YUV_YV12,
+                ColorConversionCodes.COLOR_BGR2YUV_UYVY => (int)ColorConversionCodes.COLOR_RGB2YUV_UYVY,
+                ColorConversionCodes.COLOR_RGB2YUV_UYVY => (int)ColorConversionCodes.COLOR_BGR2YUV_UYVY,
+                ColorConversionCodes.COLOR_BGR2YUV_YUY2 => (int)ColorConversionCodes.COLOR_RGB2YUV_YUY2,
+                ColorConversionCodes.COLOR_RGB2YUV_YUY2 => (int)ColorConversionCodes.COLOR_BGR2YUV_YUY2,
+                ColorConversionCodes.COLOR_BGR2YUV_YVYU => (int)ColorConversionCodes.COLOR_RGB2YUV_YVYU,
+                ColorConversionCodes.COLOR_RGB2YUV_YVYU => (int)ColorConversionCodes.COLOR_BGR2YUV_YVYU,
+                _ => int.MinValue,
+            };
+            return twin != int.MinValue;
         }
 
         /// <summary><c>cv2.contourArea(contour, oriented)</c>.</summary>

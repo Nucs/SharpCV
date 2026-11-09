@@ -254,7 +254,7 @@ namespace SharpCV
         ///     strides times the item size) into <paramref name="strides"/> without allocating.</summary>
         /// <param name="nd">The array.</param>
         /// <param name="strides">At least <c>nd.ndim</c> slots.</param>
-        private static void ByteStrides(NDArray nd, Span<long> strides)
+        internal static void ByteStrides(NDArray nd, Span<long> strides)
         {
             long[] elementStrides = nd.Shape.strides;
             long itemsize = nd.itemsize;

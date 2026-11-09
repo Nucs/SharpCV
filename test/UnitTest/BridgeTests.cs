@@ -222,6 +222,126 @@ namespace UnitTest
             }
         }
 
+        /// <summary>Every colour code whose input is 3-channel BGR or RGB, one spelling per value (aliases share it).</summary>
+        private static readonly ColorConversionCodes[] TwinCodes =
+        {
+            ColorConversionCodes.COLOR_BGR2BGRA, ColorConversionCodes.COLOR_BGR2RGBA, ColorConversionCodes.COLOR_BGR2RGB,
+            ColorConversionCodes.COLOR_BGR2GRAY, ColorConversionCodes.COLOR_RGB2GRAY,
+            ColorConversionCodes.COLOR_BGR2BGR565, ColorConversionCodes.COLOR_RGB2BGR565,
+            ColorConversionCodes.COLOR_BGR2BGR555, ColorConversionCodes.COLOR_RGB2BGR555,
+            ColorConversionCodes.COLOR_BGR2XYZ, ColorConversionCodes.COLOR_RGB2XYZ,
+            ColorConversionCodes.COLOR_BGR2YCrCb, ColorConversionCodes.COLOR_RGB2YCrCb,
+            ColorConversionCodes.COLOR_BGR2HSV, ColorConversionCodes.COLOR_RGB2HSV,
+            ColorConversionCodes.COLOR_BGR2Lab, ColorConversionCodes.COLOR_RGB2Lab,
+            ColorConversionCodes.COLOR_BGR2Luv, ColorConversionCodes.COLOR_RGB2Luv,
+            ColorConversionCodes.COLOR_BGR2HLS, ColorConversionCodes.COLOR_RGB2HLS,
+            ColorConversionCodes.COLOR_BGR2HSV_FULL, ColorConversionCodes.COLOR_RGB2HSV_FULL,
+            ColorConversionCodes.COLOR_BGR2HLS_FULL, ColorConversionCodes.COLOR_RGB2HLS_FULL,
+            ColorConversionCodes.COLOR_LBGR2Lab, ColorConversionCodes.COLOR_LRGB2Lab,
+            ColorConversionCodes.COLOR_LBGR2Luv, ColorConversionCodes.COLOR_LRGB2Luv,
+            ColorConversionCodes.COLOR_BGR2YUV, ColorConversionCodes.COLOR_RGB2YUV,
+            ColorConversionCodes.COLOR_BGR2YUV_I420, ColorConversionCodes.COLOR_RGB2YUV_I420,
+            ColorConversionCodes.COLOR_BGR2YUV_YV12, ColorConversionCodes.COLOR_RGB2YUV_YV12,
+            ColorConversionCodes.COLOR_BGR2YUV_UYVY, ColorConversionCodes.COLOR_RGB2YUV_UYVY,
+            ColorConversionCodes.COLOR_BGR2YUV_YUY2, ColorConversionCodes.COLOR_RGB2YUV_YUY2,
+            ColorConversionCodes.COLOR_BGR2YUV_YVYU, ColorConversionCodes.COLOR_RGB2YUV_YVYU,
+        };
+
+        /// <summary>
+        ///     cvtColor reads a channel-reversed 3-channel uint8 / uint16 view (<c>img[..., ::-1]</c>) WITHOUT a copy,
+        ///     converting the memory under it with the code's BGR / RGB twin. For every code with a twin, and BGR2RGB with
+        ///     0, 3 and 4 destination channels, the result equals cv2's (which copies the view first) bit for bit, or both
+        ///     refuse. float32 stays on the copy path: its twin kernels round differently in the last bit (found by this
+        ///     test: 8 of 48 BGR2GRAY values), so it is compared on the same codes as a copy. A 4-channel view and a view
+        ///     with a reversed spatial axis too also stay on the copy path.
+        /// </summary>
+        [TestMethod]
+        public void cvtColor_reads_a_channel_reversed_view_without_a_copy()
+        {
+            foreach (var name in new[] { "uint8", "uint16", "float32" })
+            {
+                using var image = UnitRandom(np.dtype(name), new Shape(6, 8, 3));
+                using var view = image["..., ::-1"];
+                foreach (var code in TwinCodes)
+                    foreach (int dstCn in code == ColorConversionCodes.COLOR_BGR2RGB ? new[] { 0, 3, 4 } : new[] { 0 })
+                        CompareCvtColor(view, code, dstCn, readsInPlace: name != "float32", $"{name} {code} dstCn={dstCn}");
+
+                using var four = UnitRandom(np.dtype(name), new Shape(6, 8, 4));
+                using var fourView = four["..., ::-1"];
+                CompareCvtColor(fourView, ColorConversionCodes.COLOR_BGR2GRAY, 0, readsInPlace: false, $"{name} 4 channels reversed");
+                using var both = image["::-1, :, ::-1"];
+                CompareCvtColor(both, ColorConversionCodes.COLOR_BGR2GRAY, 0, readsInPlace: false, $"{name} rows and channels reversed");
+            }
+        }
+
+        /// <summary>Runs <c>cvtColor(view, code, dstCn)</c> on both sides: the same result or both refuse, and whether
+        ///     SharpCV read the view in place.</summary>
+        /// <param name="view">The view (handed to cv2 as a numpy view with the same strides).</param>
+        /// <param name="code">The conversion.</param>
+        /// <param name="dstCn">The destination channel count.</param>
+        /// <param name="readsInPlace">Whether the no-copy route must have read the view.</param>
+        /// <param name="what">The case, for messages.</param>
+        private static void CompareCvtColor(NDArray view, ColorConversionCodes code, int dstCn, bool readsInPlace, string what)
+        {
+            long sources = ReversedLayoutCopy.SourcesEngaged, copies = ReversedLayoutCopy.Engaged;
+            Mat mine = null;
+            OpenCVException sharpError = null;
+            try
+            {
+                mine = cv2.cvtColor(view, code, dstCn);
+            }
+            catch (OpenCVException e)
+            {
+                sharpError = e;
+            }
+
+            Assert.AreEqual(sources + (readsInPlace ? 1 : 0), ReversedLayoutCopy.SourcesEngaged, $"{what}: read in place");
+            if (readsInPlace)
+                Assert.AreEqual(copies, ReversedLayoutCopy.Engaged, $"{what}: nothing copied");
+
+            Oracle.Run(() =>
+            {
+                object expected = null;
+                Python.Runtime.PythonException pythonError = null;
+                try
+                {
+                    expected = Oracle.cv2.cvtColor(view, (int)code, dstCn: dstCn);
+                }
+                catch (Python.Runtime.PythonException e)
+                {
+                    pythonError = e;
+                }
+
+                if (pythonError is not null || sharpError is not null)
+                {
+                    Assert.IsNotNull(pythonError, $"{what}: cv2 converted, SharpCV refused: {sharpError?.Message}");
+                    Assert.IsNotNull(sharpError, $"{what}: cv2 refused ({pythonError.Message.Split('\n')[0]}), SharpCV converted");
+                    return;
+                }
+
+                Oracle.AssertSame(expected, mine.data, what);
+            });
+            mine?.Dispose();
+        }
+
+        /// <summary>An array of <paramref name="dtype"/> with values in [0, 1) for floats and the full range for integers
+        ///     (fixed seed): valid input for every colour conversion.</summary>
+        /// <param name="dtype">uint8, uint16 or float32.</param>
+        /// <param name="shape">The shape.</param>
+        /// <returns>A new C-contiguous array.</returns>
+        private static NDArray UnitRandom(DType dtype, Shape shape)
+        {
+            if (dtype.name != "float32")
+                return RandomBits(dtype, shape);
+            var random = new Random(20261109);
+            var values = new float[shape.size];
+            for (int i = 0; i < values.Length; i++)
+                values[i] = random.NextSingle();
+            using var flat = np.array(values);
+            using var shaped = flat.reshape(shape);
+            return shaped.copy('C');
+        }
+
         /// <summary>Converts <paramref name="view"/> (Auto, so cv2's copy) and compares the Mat's bytes with NumSharp's
         ///     own C-ordered copy.</summary>
         /// <param name="view">A reversed view.</param>
