@@ -55,7 +55,7 @@ namespace SharpCV
             {
                 var m = new T();
                 dst[i] = m;
-                dstPtr[i] = m;
+                dstPtr[i] = (IntPtr)m;
             }
             cv2_native_api.vector_Mat_assignToArray(_handle, dstPtr);
             GC.KeepAlive(this);

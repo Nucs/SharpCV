@@ -95,16 +95,32 @@ namespace SharpCV
                 cv2_native_api.dnn_Net_delete(_handle);
         }
 
-        /// <summary>The native <c>cv::dnn::Net*</c>.</summary>
+        /// <summary>
+        ///     The native <c>cv::dnn::Net*</c>, for a P/Invoke argument of your own: <c>(IntPtr)net</c>;
+        ///     <see cref="IntPtr.Zero"/> once the network is disposed. The network keeps ownership.
+        /// </summary>
         /// <param name="net">The network.</param>
         /// <returns>Its handle.</returns>
-        public static implicit operator IntPtr(Net net)
+        /// <exception cref="NullReferenceException"><paramref name="net"/> is null (a managed failure, where a zero
+        ///     pointer would be an access violation inside OpenCvSharpExtern).</exception>
+        /// <remarks>
+        ///     Explicit since 0.15, as <see cref="Mat"/>'s is: implicit (0.14), it made <c>net * 2</c> and
+        ///     <c>net &gt; 0</c> compile into arithmetic on the native pointer.
+        /// </remarks>
+        public static explicit operator IntPtr(Net net)
             => net._handle;
 
-        /// <summary>Wraps a <c>cv::dnn::Net*</c> and takes ownership of it.</summary>
+        /// <summary>
+        ///     Wraps a <c>cv::dnn::Net*</c> and takes ownership of it: <c>(Net)ptr</c>. The network deletes the pointer
+        ///     when disposed or collected, so never wrap the same pointer twice.
+        /// </summary>
         /// <param name="handle">The pointer.</param>
         /// <returns>The owning network.</returns>
-        public static implicit operator Net(IntPtr handle)
+        /// <remarks>
+        ///     Explicit since 0.15, as <see cref="Mat"/>'s is: implicit (0.14), <c>Net n = 5;</c> compiled (C# converts
+        ///     an int to <c>nint</c> implicitly) into a network at address 5, an access violation at its first use.
+        /// </remarks>
+        public static explicit operator Net(IntPtr handle)
             => new Net(handle);
     }
 }

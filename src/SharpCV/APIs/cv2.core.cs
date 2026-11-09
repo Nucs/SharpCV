@@ -24,8 +24,9 @@ namespace SharpCV
     ///     </para>
     ///     <para>
     ///     <b>The pre-0.15 overloads</b> (<c>cvtColor(Mat ...)</c>, <c>rectangle(NDArray ...)</c>, and so on, in
-    ///     cv2.compat.cs) are kept so code written against them still compiles: an <c>IntPtr</c> argument (which converts
-    ///     to an OWNING <see cref="Mat"/>), a <c>Mat</c>-typed method group, a C# 12 caller. Each forwards to its proxy
+    ///     cv2.compat.cs) are kept so code written against them still compiles: a <c>(Mat)ptr</c> argument (an OWNING
+    ///     <see cref="Mat"/>; a pointer converts only by that explicit cast since 0.15), a <c>Mat</c>-typed method group, a
+    ///     C# 12 caller. Each forwards to its proxy
     ///     twin and carries <c>[OverloadResolutionPriority(-1)]</c>, so a C# 13+ compiler (the default from net9.0 on, or
     ///     <c>LangVersion</c> 13+) binds Mat and NDArray arguments to the proxy overloads. A C# 12 compiler (the default
     ///     for net8.0 projects) ignores the attribute and binds an NDArray argument to the <c>Mat</c> overload, the better
@@ -83,7 +84,7 @@ namespace SharpCV
             using (var vec = new VectorOfMat())
             {
                 // core_split takes the cv::Mat itself, not an _InputArray.
-                NativeMethods.Call(() => cv2_native_api.core_split(m.Mat, vec));
+                NativeMethods.Call(() => cv2_native_api.core_split((IntPtr)m.Mat, vec));
                 return vec.ToArray();
             }
         }

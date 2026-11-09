@@ -7,19 +7,39 @@ namespace SharpCV
 {
     public partial class Mat
     {
-        /// <summary>The native <c>cv::Mat*</c>, for P/Invoke arguments; <see cref="IntPtr.Zero"/> for null or a disposed
-        ///     Mat (OpenCV then sees no array). A deferred Mat (an implicit NDArray conversion) builds its header
-        ///     here.</summary>
+        /// <summary>
+        ///     The native <c>cv::Mat*</c>, for a P/Invoke argument of your own: <c>(IntPtr)mat</c>. <see cref="IntPtr.Zero"/>
+        ///     for null or a disposed Mat (OpenCV then sees no array); a deferred Mat (an implicit NDArray conversion)
+        ///     builds its header here. The Mat keeps ownership: the pointer is valid only while the Mat is alive and
+        ///     undisposed.
+        /// </summary>
         /// <param name="mat">The Mat.</param>
         /// <returns>Its handle.</returns>
         /// <exception cref="OpenCVException">A deferred Mat's header could not be built.</exception>
-        public static implicit operator IntPtr(Mat mat)
+        /// <remarks>
+        ///     Explicit since 0.15. Implicit (0.14), it lent C#'s integer operators to every Mat: <c>mat * 2</c>,
+        ///     <c>mat + mat</c> and <c>-mat</c> compiled into arithmetic on the native pointer (a <c>long</c>), and
+        ///     <c>if (mat &gt; 0)</c> compared the pointer, always true. Those no longer compile (CS0019; CS0023 for
+        ///     <c>-mat</c>); arithmetic on the pixels goes through their view, <c>mat.data * 2</c>.
+        /// </remarks>
+        public static explicit operator IntPtr(Mat mat)
             => mat is null ? IntPtr.Zero : mat._handle != IntPtr.Zero ? mat._handle : mat.IsPending ? mat.Handle : IntPtr.Zero;
 
-        /// <summary>Wraps a <c>cv::Mat*</c> and takes ownership of it (see <see cref="Mat(IntPtr)"/>).</summary>
+        /// <summary>
+        ///     Wraps a <c>cv::Mat*</c> and takes ownership of it (see <see cref="Mat(IntPtr)"/>): <c>(Mat)ptr</c>. The Mat
+        ///     deletes the header when disposed or collected, so pass only a pointer nothing else deletes:
+        ///     <c>(Mat)(IntPtr)mat</c> makes a second owner of <c>mat</c>'s header, which is then deleted twice.
+        /// </summary>
         /// <param name="handle">The pointer.</param>
         /// <returns>The owning Mat.</returns>
-        public static implicit operator Mat(IntPtr handle)
+        /// <exception cref="NotSupportedException">The loaded OpenCvSharpExtern is not the verified OpenCV 4.13.</exception>
+        /// <remarks>
+        ///     Explicit since 0.15. Implicit (0.14), every small integer converted too, through C#'s implicit int to
+        ///     <c>nint</c> conversion: <c>Mat m = 5;</c> compiled into a Mat at address 5, an access violation inside
+        ///     OpenCV at its first use, which .NET cannot catch. A 0.14 call that passed an <c>IntPtr</c> to a cv2
+        ///     function now casts it: <c>cv2.cvtColor((Mat)ptr, code)</c>.
+        /// </remarks>
+        public static explicit operator Mat(IntPtr handle)
             => new Mat(handle);
 
         /// <summary>

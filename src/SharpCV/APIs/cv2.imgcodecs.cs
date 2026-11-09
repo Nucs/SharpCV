@@ -52,7 +52,7 @@ namespace SharpCV
         /// <exception cref="OpenCVException">The region does not lie inside the image.</exception>
         public Mat imcrop(Mat src, Rect rect)
         {
-            IntPtr source = src;
+            IntPtr source = (IntPtr)src;
             IntPtr handle = IntPtr.Zero;
             NativeMethods.Call(() => cv2_native_api.core_Mat_new7(source, rect, out handle));
             var roi = new Mat(handle);

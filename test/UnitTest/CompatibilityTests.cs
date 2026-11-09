@@ -48,7 +48,7 @@ namespace UnitTest
         }
 
         /// <summary>
-        ///     Invoked directly (the binding a C# 12 caller, an <c>IntPtr</c> argument or an assembly compiled against the
+        ///     Invoked directly (the binding a C# 12 caller, a <c>(Mat)ptr</c> argument or an assembly compiled against the
         ///     old surface gets; this C# 13+ project reaches them by reflection, since its own calls bind the proxies):
         ///     the same pixels as the proxies, an NDArray drawn into in place, a <c>Mat[]</c> variable concatenated, the
         ///     Moments constructor's fields.
@@ -161,6 +161,40 @@ namespace UnitTest
             using var wideProxy = cv2.hconcat(pixels, reversed);
             Assert.IsTrue(np.array_equal(wideProxy.data, wide.data), "hconcat of deferred Mats");
             Assert.IsTrue(left.IsPending && right.IsPending, "concatenated through the proxy path, unbuilt");
+        }
+
+        /// <summary>
+        ///     <see cref="Mat"/>'s and <see cref="Net"/>'s pointer conversions are explicit both ways (0.15). Implicit, as in
+        ///     0.14, they lent C#'s integer operators to the handle types: <c>mat * 2</c> multiplied the native pointer,
+        ///     <c>if (mat &gt; 0)</c> compared it (always true), and <c>Mat m = 5;</c> compiled, through C#'s implicit int to
+        ///     <c>nint</c> conversion, into a Mat at address 5 that crashed OpenCV at its first use. C# never applies an
+        ///     explicit conversion on its own, so the operator kinds pin all of those out; the casts keep their meaning (a
+        ///     live object's handle, zero once it is disposed).
+        /// </summary>
+        [TestMethod]
+        public void pointer_conversions_are_explicit()
+        {
+            foreach (var type in new[] { typeof(Mat), typeof(Net) })
+            {
+                var conversions = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                    .Where(m => m.Name is "op_Implicit" or "op_Explicit")
+                    .Where(m => m.ReturnType == typeof(IntPtr) || m.GetParameters()[0].ParameterType == typeof(IntPtr))
+                    .ToArray();
+                Assert.AreEqual(2, conversions.Length, $"{type.Name}: one conversion to IntPtr, one from it");
+                foreach (var conversion in conversions)
+                    Assert.AreEqual("op_Explicit", conversion.Name, $"{type.Name}: {conversion}");
+            }
+
+            var img = cv2.imread(imgSolar);
+            Assert.AreNotEqual(IntPtr.Zero, (IntPtr)img, "(IntPtr)mat still reaches the header");
+            img.Dispose();
+            Assert.AreEqual(IntPtr.Zero, (IntPtr)img, "a disposed Mat is no array");
+            Assert.AreEqual(IntPtr.Zero, (IntPtr)(Mat)null, "nor is a null one");
+
+            var net = new Net();
+            Assert.AreNotEqual(IntPtr.Zero, (IntPtr)net, "(IntPtr)net still reaches the network");
+            net.Dispose();
+            Assert.AreEqual(IntPtr.Zero, (IntPtr)net, "a disposed network");
         }
 
         /// <summary>Invokes the priority -1 overload of a <c>cv2</c> function whose parameter types match the arguments'
