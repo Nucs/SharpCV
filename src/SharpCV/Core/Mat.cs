@@ -46,6 +46,62 @@ namespace SharpCV
         private NDArray _source;
 
         /// <summary>
+        ///     A deferred Mat's counted view of the array it was converted from (<see cref="Deferred"/>), or null. While
+        ///     the native header is not built yet (<c>_handle</c> is zero), cv2 functions read this array instead; after
+        ///     <see cref="Materialize"/> it stays until the Mat is disposed, either as <see cref="_source"/> itself or
+        ///     beside the copy made from it, so a call that resolved it a moment earlier never sees it disposed.
+        /// </summary>
+        private NDArray _pending;
+
+        /// <summary>
+        ///     The array a cv2 function should read instead of this Mat: a deferred Mat's array while nothing has built its
+        ///     native header (and the Mat is not disposed).
+        /// </summary>
+        /// <param name="array">The pending array, or null.</param>
+        /// <returns>True when the Mat is still deferred.</returns>
+        internal bool TryGetPending(out NDArray array)
+        {
+            array = _handle == IntPtr.Zero && !IsDisposed ? Volatile.Read(ref _pending) : null;
+            // `is not null`: NDArray overloads != element-wise.
+            return array is not null;
+        }
+
+        /// <summary>True while this is a deferred Mat whose native header nothing has needed yet.</summary>
+        internal bool IsPending => TryGetPending(out _);
+
+        /// <summary>
+        ///     Builds a deferred Mat's native header the first time something needs it: exactly the Mat
+        ///     <c>new Mat(array)</c> builds (Auto, channels folded), over the counted view taken at conversion.
+        /// </summary>
+        /// <returns>The new handle.</returns>
+        /// <exception cref="ObjectDisposedException">The Mat was disposed, or it is not a deferred Mat (a released
+        ///     handle).</exception>
+        /// <exception cref="OpenCVException">OpenCV failed to build the header.</exception>
+        private IntPtr Materialize()
+        {
+            var pending = Volatile.Read(ref _pending);
+            if (pending is null || IsDisposed)
+                throw new ObjectDisposedException(nameof(Mat));
+
+            // Two threads touching one deferred Mat build one header: the pending view is the lock (private, never null
+            // while deferred).
+            lock (pending)
+            {
+                if (_handle != IntPtr.Zero)
+                    return _handle;
+                if (IsDisposed)
+                    throw new ObjectDisposedException(nameof(Mat));
+
+                // borrow: the plan references the view itself instead of a second view; this Mat owns it through
+                // _pending, which Dispose releases.
+                Build(pending, MatCodecMode.Auto, "array", output: false, ndMat: false, borrow: true);
+                // Native state exists now, so the finalizer turned off at conversion must run if nobody disposes.
+                GC.ReRegisterForFinalize(this);
+                return _handle;
+            }
+        }
+
+        /// <summary>
         ///     True when <see cref="_source"/> is the CALLER's array, borrowed by a Mat made for one call
         ///     (<see cref="ForCall"/>, <see cref="ForOutput"/>): referenced so it stays reachable, never disposed here.
         /// </summary>
@@ -271,6 +327,8 @@ namespace SharpCV
         {
             get
             {
+                // The header first: a deferred Mat learns whether its array is read-only only when it is built.
+                var handle = Handle;
                 if (_sourceReadOnly)
                     throw OpenCVException.BadArgument("img marked as output argument, but provided NumPy array marked as readonly");
 
@@ -278,7 +336,7 @@ namespace SharpCV
                 if(_outputArray == IntPtr.Zero)
                 {
                     // Closure-free for the same reason as InputArray: every result Mat creates this wrapper.
-                    var call = (Mat: Handle, Wrapper: IntPtr.Zero);
+                    var call = (Mat: handle, Wrapper: IntPtr.Zero);
                     NativeMethods.Call(ref call, static (ref (IntPtr Mat, IntPtr Wrapper) s) =>
                         cv2_native_api.core_OutputArray_new_byMat(s.Mat, out s.Wrapper));
                     _outputArray = call.Wrapper;
@@ -304,9 +362,10 @@ namespace SharpCV
             }
         }
 
-        /// <summary>The native cv::Mat pointer.</summary>
+        /// <summary>The native cv::Mat pointer; a deferred Mat builds it here on first use.</summary>
         /// <exception cref="ObjectDisposedException">The Mat was disposed: OpenCV would dereference a null header.</exception>
-        internal IntPtr Handle => _handle != IntPtr.Zero ? _handle : throw new ObjectDisposedException(nameof(Mat));
+        /// <exception cref="OpenCVException">A deferred Mat's header could not be built.</exception>
+        internal IntPtr Handle => _handle != IntPtr.Zero ? _handle : Materialize();
 
         /// <summary>
         ///     The pixels as a zero-copy NDArray view; the same as <see cref="data"/>.
@@ -540,10 +599,12 @@ namespace SharpCV
             {
                 // The Mat's own view holds a lease of its own; aliases handed out keep theirs.
                 Interlocked.Exchange(ref _cache, null)?.Dispose();
-                // A borrowed array belongs to the caller of the call this Mat was made for.
+                // A borrowed array belongs to the caller of the call this Mat was made for (or, for a materialized deferred
+                // Mat, is the pending view released just below).
                 if (!_sourceBorrowed)
                     _source?.Dispose();
                 _source = null;
+                Interlocked.Exchange(ref _pending, null)?.Dispose();
             }
         }
 

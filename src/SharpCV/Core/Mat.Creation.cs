@@ -77,6 +77,24 @@ namespace SharpCV
         /// <exception cref="OpenCVException">A cv2 conversion refusal, or OpenCV failed to build the header.</exception>
         internal Mat(NDArray nd, MatCodecMode mode, string name, bool output, bool ndMat, bool borrow)
         {
+            Build(nd, mode, name, output, ndMat, borrow);
+        }
+
+        /// <summary>
+        ///     The NDArray conversion's work, shared by the constructor and a deferred Mat's first native use
+        ///     (<see cref="Materialize"/>): plans the conversion, builds the cv::Mat header over the planned memory, and
+        ///     records what the Mat keeps (the view or copy, its read-only flag, the copy's memory report).
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="mode">Share, refuse to copy, or copy.</param>
+        /// <param name="name">The argument name used in refusal messages.</param>
+        /// <param name="output">True when OpenCV writes into the array.</param>
+        /// <param name="ndMat">True for an n-D blob argument: no multi-channel folding.</param>
+        /// <param name="borrow">True to reference a viewable array as it is (see the constructor).</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="OpenCVException">A cv2 conversion refusal, or OpenCV failed to build the header.</exception>
+        private void Build(NDArray nd, MatCodecMode mode, string name, bool output, bool ndMat, bool borrow)
+        {
             // The plan owns its view or copy until TakeSource; if the native header fails, disposing the plan releases it.
             using var plan = NDArrayToMat.Plan(nd, mode, name, output, ndMat, borrow);
             // The plan travels as the state of a static lambda: no closure for the call every NDArray argument makes.
@@ -132,6 +150,32 @@ namespace SharpCV
         ///     for the length of the call anyway.</remarks>
         internal static Mat ForCall(NDArray nd, string name, bool ndMat)
             => new Mat(nd, MatCodecMode.Auto, name, output: false, ndMat, borrow: true);
+
+        /// <summary>
+        ///     The Mat <c>implicit operator Mat(NDArray)</c> returns: a DEFERRED Mat that holds a counted view of
+        ///     <paramref name="nd"/> and builds its native header (and any copy) only when something first needs it. Until
+        ///     then a cv2 function given this Mat (a C# 12 caller bound to a pre-0.15 Mat overload, or an InputArray built
+        ///     from it) reads the ARRAY instead, converted for that one call and released when it returns, so an NDArray
+        ///     argument costs the same whichever overload the caller's compiler picked.
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <returns>The deferred Mat.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="OpenCVException">The conversion refuses the array (its dtype has no depth, it has 32 or more
+        ///     dimensions, an axis is too long): raised here, as the eager conversion raised it.</exception>
+        /// <remarks>
+        ///     Transparent by design: any native use (<see cref="data"/>, <see cref="shape"/>, an ROI, an output argument,
+        ///     <c>(IntPtr)mat</c>) builds exactly the Mat <c>new Mat(nd)</c> builds, with the counted view taken here, so
+        ///     the caller may still dispose <paramref name="nd"/> at once. Its finalizer is off until then: the view has
+        ///     its own, and no native state exists yet.
+        /// </remarks>
+        internal static Mat Deferred(NDArray nd)
+        {
+            NDArrayToMat.ValidateInput(nd, "array", ndMat: false);
+            var mat = new Mat(IntPtr.Zero) { _pending = nd.view() };
+            GC.SuppressFinalize(mat);
+            return mat;
+        }
 
         //this method copies Mat to a new NDArray
         /// <summary>The pixels as an independent C-contiguous copy (<see cref="AsNDArray"/> with

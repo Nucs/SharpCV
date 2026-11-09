@@ -48,6 +48,12 @@ namespace SharpCV
         /// <returns>The argument.</returns>
         public static implicit operator InputArray(Mat mat) => new InputArray(mat, null);
 
+        /// <summary>The NDArray this argument stands for: the array given, or a deferred Mat's array while nothing has
+        ///     built it; null for a built Mat. Resolved at each use, never cached, since a deferred Mat may be built
+        ///     between calls.</summary>
+        internal NDArray ArrayOrPending
+            => Array ?? (Mat is not null && Mat.TryGetPending(out NDArray pending) ? pending : null);
+
         /// <summary>An NDArray argument, converted for each call by opencv-python's rules and released after it.</summary>
         /// <param name="array">The array.</param>
         /// <returns>The argument.</returns>
@@ -70,7 +76,14 @@ namespace SharpCV
         internal MatArgument Open(string name, bool ndMat = false)
         {
             if (Mat is not null)
+            {
+                // A deferred Mat nothing has built yet (an implicit NDArray conversion) is still just its array: convert
+                // that for this call, with the Mat's own flags (Auto, channels folded) so the result is the one the built
+                // Mat would give, instead of building the Mat and leaving its copy to its owner.
+                if (Mat.TryGetPending(out NDArray pending))
+                    return new MatArgument(SharpCV.Mat.ForCall(pending, name, ndMat: false), temporary: true);
                 return new MatArgument(Mat, temporary: false);
+            }
             // `is not null`: NDArray overloads != element-wise.
             if (Array is not null)
                 return new MatArgument(SharpCV.Mat.ForCall(Array, name, ndMat), temporary: true);

@@ -41,8 +41,8 @@ namespace SharpCV
         }
 
         /// <summary>The pre-0.15 Mat constructor, kept for source compatibility; forwards to the InputArray one. C# 13+
-        ///     prefers that constructor for Mat and NDArray arguments; C# 12 binds an NDArray argument here, and its
-        ///     implicit Mat then waits for the finalizer.</summary>
+        ///     prefers that constructor for Mat and NDArray arguments; C# 12 binds an NDArray argument here through the
+        ///     deferred implicit conversion, and the call reads that array itself, released at return.</summary>
         /// <inheritdoc cref="Moments(InputArray, bool)"/>
         [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
         public Moments(Mat img, bool binaryImage = false)

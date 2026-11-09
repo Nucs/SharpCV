@@ -29,11 +29,12 @@ namespace SharpCV
             // img[..., ::-1] of a 3-channel image is the memory under it with the channel order reversed, so converting
             // it with a BGR-input code is converting that memory with the code's RGB-input twin: OpenCV implements each
             // pair as ONE kernel parameterized by the blue channel's index, bit-identical for the integer depths
-            // TryChannelReversedSource admits, and the copy cv2 makes first is skipped. `is not null`: NDArray's != is
-            // element-wise.
-            if (img.Array is not null && ChannelSwapTwin(code, dstCnt, out int twin, out int twinDstCnt))
+            // TryChannelReversedSource admits, and the copy cv2 makes first is skipped. A deferred Mat (an implicit
+            // NDArray conversion a C# 12 caller made) counts as its array. `is not null`: NDArray's != is element-wise.
+            var array = img.ArrayOrPending;
+            if (array is not null && ChannelSwapTwin(code, dstCnt, out int twin, out int twinDstCnt))
             {
-                using var unreversed = ReversedLayoutCopy.TryChannelReversedSource(img.Array);
+                using var unreversed = ReversedLayoutCopy.TryChannelReversedSource(array);
                 if (unreversed is not null)
                 {
                     try
@@ -44,8 +45,10 @@ namespace SharpCV
                     }
                     finally
                     {
-                        // The header reads the caller's memory: the array stays reachable until OpenCV is done.
-                        GC.KeepAlive(img.Array);
+                        // The header reads the caller's memory: the array (and a deferred Mat holding it) stays reachable
+                        // until OpenCV is done.
+                        GC.KeepAlive(array);
+                        GC.KeepAlive(img.Mat);
                     }
                 }
             }

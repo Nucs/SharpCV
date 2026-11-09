@@ -93,6 +93,76 @@ namespace UnitTest
             Assert.AreEqual(moments.Nu03, compatMoments.Nu03, "nu03");
         }
 
+        /// <summary>
+        ///     <c>Mat m = nd;</c> is deferred and transparent: the Mat builds nothing until used, then behaves as the eager
+        ///     Mat did (shape, pixels, an ROI), a refusal is raised at the conversion itself, the caller may dispose the
+        ///     array at once, and a read-only array is still refused as an output argument (the read-only flag is only
+        ///     known once the header is built).
+        /// </summary>
+        [TestMethod]
+        public void implicit_conversion_is_deferred_and_transparent()
+        {
+            var nd = np.arange(4 * 6 * 3).reshape(4, 6, 3).astype(np.uint8);
+            var expected = nd.copy();
+            Mat mat = nd;
+            Assert.IsTrue(mat.IsPending, "nothing built at conversion");
+            nd.Dispose();
+            Assert.AreEqual(new Shape(4, 6), new Shape(mat.shape[0], mat.shape[1]), "shape builds the header");
+            Assert.IsFalse(mat.IsPending, "built on first native use");
+            Assert.IsTrue(np.array_equal(expected, mat.data), "the pixels, after the caller disposed its array");
+            using (var roi = mat[(1, 3), (2, 5)])
+                Assert.IsTrue(np.array_equal(expected["1:3, 2:5"], roi.data), "an ROI of it");
+            mat.Dispose();
+
+            var boolean = np.zeros(new Shape(2, 2), np.dtype("bool"));
+            var refusal = Assert.ThrowsException<OpenCVException>(() => { Mat refused = boolean; });
+            StringAssert.Contains(refusal.Message, "data type = bool is not supported", "refused at conversion, as before");
+
+            // Broadcast along a length-1 axis: read-only, yet viewable (the 0 stride is never used), so the built Mat views
+            // it rather than copying it, and only its read-only flag can refuse the drawing.
+            using Mat readOnly = np.broadcast_to(np.zeros(new Shape(4), np.uint8), new Shape(1, 4));
+            Assert.IsTrue(readOnly.IsPending);
+            var output = Assert.ThrowsException<OpenCVException>(() => cv2.rectangle(readOnly, new Point(0, 0), new Point(1, 0), 1));
+            StringAssert.Contains(output.Message, "marked as readonly", "a read-only array is no output, deferred or not");
+        }
+
+        /// <summary>
+        ///     The C# 12 path: an NDArray argument bound to a pre-0.15 Mat overload arrives as a deferred Mat, and the call
+        ///     reads its ARRAY. A reversed 1080p view takes cvtColor's no-copy route and the Mat stays unbuilt; a
+        ///     reversed view that needs a copy (resize) has it released when the call returns, so nothing but the result
+        ///     is held; deferred Mats concatenate through the proxy path. Not parallel: it reads the process-wide
+        ///     native-memory count.
+        /// </summary>
+        [TestMethod]
+        [DoNotParallelize]
+        public void compat_overloads_read_a_deferred_mat_as_its_array()
+        {
+            using var src = cv2.imread(imgSolar);
+            using var frame = cv2.resize(src, (1920, 1080));
+            using NDArray pixels = frame.data.copy();
+            using var reversed = pixels["..., ::-1"];
+
+            long sources = ReversedLayoutCopy.SourcesEngaged;
+            using Mat deferred = reversed;
+            using var gray = (Mat)Compat(nameof(cv_api.cvtColor), deferred, ColorConversionCodes.COLOR_RGB2GRAY, 0);
+            using var expected = cv2.cvtColor(reversed, ColorConversionCodes.COLOR_RGB2GRAY);
+            Assert.AreEqual(sources + 2, ReversedLayoutCopy.SourcesEngaged, "both calls read the view in place");
+            Assert.IsTrue(np.array_equal(expected.data, gray.data), "the same pixels as the proxy");
+            Assert.IsTrue(deferred.IsPending, "the deferred Mat never built its header or copy");
+
+            long outstanding = NativeMemoryTracker.Outstanding;
+            using (var half = (Mat)Compat(nameof(cv_api.resize), deferred, (960, 540), 0.0, 0.0, InterpolationFlags.INTER_AREA))
+                Assert.AreEqual(outstanding + 960 * 540 * 3, NativeMemoryTracker.Outstanding, "only the result is held: the copy died with the call");
+            Assert.AreEqual(outstanding, NativeMemoryTracker.Outstanding, "nothing left once the result is disposed");
+            Assert.IsTrue(deferred.IsPending);
+
+            using Mat left = pixels, right = reversed;
+            using var wide = cv2.hconcat(new[] { left, right });
+            using var wideProxy = cv2.hconcat(pixels, reversed);
+            Assert.IsTrue(np.array_equal(wideProxy.data, wide.data), "hconcat of deferred Mats");
+            Assert.IsTrue(left.IsPending && right.IsPending, "concatenated through the proxy path, unbuilt");
+        }
+
         /// <summary>Invokes the priority -1 overload of a <c>cv2</c> function whose parameter types match the arguments'
         ///     runtime types (null matches a nullable parameter).</summary>
         /// <param name="name">The function name.</param>

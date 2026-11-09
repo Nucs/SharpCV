@@ -73,8 +73,8 @@ namespace SharpCV
         }
 
         /// <summary>The pre-0.15 Mat overload, kept for source compatibility; forwards to the InputArray overload. C# 13+
-        ///     prefers that overload for Mat and NDArray arguments; C# 12 binds an NDArray argument here, and its implicit
-        ///     Mat then waits for the finalizer.</summary>
+        ///     prefers that overload for Mat and NDArray arguments; C# 12 binds an NDArray argument here through
+        ///     the deferred implicit conversion, and the call reads that array itself, released at return.</summary>
         /// <inheritdoc cref="blobFromImage(InputArray, double, ValueTuple{int, int}, Nullable{Scalar}, bool, bool)"/>
         [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
         public Mat blobFromImage(Mat image, double scaleFactor = 1.0, (int, int) size = default, Scalar? mean = null, bool swapRB = false, bool crop = false)

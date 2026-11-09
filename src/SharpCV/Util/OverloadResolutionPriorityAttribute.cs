@@ -10,8 +10,9 @@ namespace System.Runtime.CompilerServices
     /// <remarks>
     ///     The compiler recognizes the attribute by its full name, so this internal copy is read from SharpCV's metadata
     ///     by consumers too. A C# 12 compiler (the default for net8.0 projects) ignores it: it binds an NDArray argument
-    ///     to the <c>Mat</c> overload, the better conversion target, which converts through
-    ///     <c>implicit operator Mat(NDArray)</c> and leaves that temporary to the finalizer, as SharpCV did before 0.15.
+    ///     to the <c>Mat</c> overload, the better conversion target, through <c>implicit operator Mat(NDArray)</c>, whose
+    ///     deferred Mat the call then reads as its array (see that operator), so the C# 12 path costs about what the
+    ///     proxy does.
     /// </remarks>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
     internal sealed class OverloadResolutionPriorityAttribute : Attribute

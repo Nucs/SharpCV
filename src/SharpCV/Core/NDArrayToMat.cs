@@ -250,6 +250,40 @@ namespace SharpCV
             }
         }
 
+        /// <summary>
+        ///     Raises exactly the refusals <see cref="Plan"/> raises for an <see cref="MatCodecMode.Auto"/> input
+        ///     conversion of <paramref name="nd"/>, in the same order and words, without making the view or the copy: a
+        ///     deferred Mat (<see cref="Mat.Deferred"/>) refuses at conversion time, as an eager one always did, and
+        ///     builds its header only when first used.
+        /// </summary>
+        /// <param name="nd">The array.</param>
+        /// <param name="name">The argument's name in refusal messages.</param>
+        /// <param name="ndMat">True for an n-D blob argument: no multi-channel folding.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nd"/> is null.</exception>
+        /// <exception cref="OpenCVException"><see cref="ErrorCode.StsBadArg"/>: the dtype has no depth (and is not
+        ///     int64 / uint64, which are cast), the array has 32 or more dimensions, or an axis is longer than
+        ///     <see cref="int.MaxValue"/>.</exception>
+        public static void ValidateInput(NDArray nd, string name, bool ndMat)
+        {
+            if (nd is null)
+                throw new ArgumentNullException(name);
+            if (!MatDtypes.TryToDepth(nd.typecode, out _) && nd.typecode != NPTypeCode.Int64 && nd.typecode != NPTypeCode.UInt64)
+                throw OpenCVException.BadArgument($"{name} data type = {nd.dtype.name} is not supported");
+
+            int ndims = nd.ndim;
+            if (ndims >= CV_MAX_DIM)
+                throw OpenCVException.BadArgument($"{name} dimensionality (={ndims}) is too high");
+
+            // Plan checks the axes left after the channel fold, from the last one down.
+            long[] sizes = nd.Shape.dimensions;
+            int folded = ndims == 3 && sizes[2] <= MatTypeExtensions.CV_CN_MAX && !ndMat ? 2 : ndims;
+            for (int i = folded - 1; i >= 0; --i)
+            {
+                if (sizes[i] > int.MaxValue)
+                    throw OpenCVException.BadArgument($"{name} axis {i} has {sizes[i]} elements; a Mat axis holds at most {int.MaxValue}");
+            }
+        }
+
         /// <summary>Writes <paramref name="nd"/>'s byte strides (<see cref="NDArray.strides"/>'s values, the element
         ///     strides times the item size) into <paramref name="strides"/> without allocating.</summary>
         /// <param name="nd">The array.</param>
